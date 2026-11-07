@@ -4,8 +4,8 @@
 > When the user returns after a break, this file tells them where things stand.
 
 **Last updated:** 2026-11-07
-**Active phase:** Phase 2 — Form and admin
-**Status:** ⏸ Access configured and deployed — blocked on user: test the admin login
+**Active phase:** Phase 3 — Email
+**Status:** ⏸ not started — blocked on user: Phase 3 preparation (domain, DNS permission, Resend key)
 
 ---
 
@@ -15,8 +15,8 @@
 |---|---|---|---|
 | 0 | Skeleton | ✅ | `8b74e18` |
 | 1 | Static pages | ✅ | `bbdf3c0` |
-| 2 | Form and admin | ⏸ | `7aadf1b` + Access follow-up commit |
-| 3 | Email | ⬜ | — |
+| 2 | Form and admin | ✅ | `7aadf1b`, `94b5749` (Access) |
+| 3 | Email | ⏸ | — |
 | 4 | Guide sales | ⬜ | — |
 | 5 | Booking (without Google) | ⬜ | — |
 | 6 | Google Calendar | ⬜ | — |
@@ -30,11 +30,15 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Cloudflare Access is set up and the Worker is configured with it (`ACCESS_TEAM_DOMAIN = twilight-surf-1e57.cloudflareaccess.com`, `ACCESS_AUD = 3cd68cb3…5d0b`). Verified with curl: `/admin/` and `/admin/konusma/1` redirect to the Access login; `/` and `/rehber` stay public; bare `/admin` is redirected by the Worker to `/admin/`. Remaining: user logs in once to confirm the end-to-end flow, then Phase 2 is done.
+Phase 2 done; admin login verified by the user on 2026-11-07. Phase 3 waits for its preparation items (below).
 
 ## Blocked on user
 
-**Test the admin login:** open https://uceksen.gizemderinkok.workers.dev/admin → enter your email → enter the code from the email → the "Konuşmalar" list should appear with your name top right. Reply with what you see.
+**Phase 3 preparation (SPEC §10 items 4–6):**
+1. **Domain** in Cloudflare, zone active. As of 2026-11-07 the API token sees only `gizem.me` and `yildizna.me` — no `uceksen.com`.
+2. **DNS permission** on `CLOUDFLARE_API_TOKEN` covering that zone (Zone → DNS → Edit, plus Zone → Zone → Read).
+3. **Resend account** + API key, added to `~/.gizem-creds` as `RESEND_API_KEY` (agent puts it into `.dev.vars` and `wrangler secret put`). Not present yet.
+4. Then: MX approval (SPEC §11 step 3) — decide root MX vs. reply subdomain.
 
 How Access was set up (dashboard as of 2026-11, for reference): Zero Trust → Access controls → Applications → Self-hosted and private → *Workers* → **don't** pick a Worker type (both "production and preview URLs" and "preview URLs" protect the whole Worker; neither takes a path) → instead Destinations → **+ Add public hostname**: subdomain `uceksen`, domain `gizemderinkok.workers.dev`, path `admin`. Policy `Admins` (Allow, Include → Emails: the two admin addresses). Authentication: One-time PIN (had to be added first under login methods; only "Cloudflare" was listed), instant authentication on. App name in dashboard: `uceksen`.
 
@@ -75,7 +79,7 @@ How Access was set up (dashboard as of 2026-11, for reference): Zero Trust → A
 - `public/_headers`: nosniff, referrer policy, `X-Frame-Options: DENY`, permissions policy, long cache on fonts
 - Worker falls back to `ASSETS` for unmatched paths (needed for tests; no effect in production)
 
-**Phase 2 — Form and admin (2026-11-07, code done; Access configured; login test pending)**
+**Phase 2 — Form and admin (2026-11-07, done; admin login verified by user)**
 - `POST /api/talep` (JSON from the modal, form-encoded as no-JS fallback → Turkish HTML page): honeypot `website` (200, nothing stored), KV rate limit 5/hour/IP (`KV` namespace `uceksen-kv`), validation with Turkish messages, then one D1 batch: upsert `contacts` by email (lower-cased), new `conversations` (state `new`, 32-char base64url `reply_token` + `plus_token`, `source`, `consent_at`), first `messages` row (`in`, `customer`)
 - Migration `0002`: `conversations.source`, `conversations.consent_at`
 - Modal script moved to `public/talep.js` (shared by `/danismanlik` and `/hakkimizda`), real submit, inline error box, disabled button while sending
@@ -127,4 +131,4 @@ How Access was set up (dashboard as of 2026-11, for reference): Zero Trust → A
 
 ## Next step
 
-User confirms the admin login works → Phase 2 done. Then Phase 3 (email) — before it: domain, DNS permission on the token, Resend account + API key, MX approval.
+Phase 3 (email) — before it: domain, DNS permission on the token, Resend account + API key, MX approval.
