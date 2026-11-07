@@ -1,0 +1,25 @@
+name = "uceksen"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "ef35eded2f130806ec2824e2920866ee"
+workers_dev = true
+
+# Single deployment. ENVIRONMENT stays "staging" until go-live (Phase 9) so the
+# DEV_EMAIL guard is active. Locally, .dev.vars overrides it to "local".
+[vars]
+ENVIRONMENT = "staging"
+APP_URL = "https://uceksen.gizemderinkok.workers.dev"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "uceksen-db"
+database_id = "8cef0ac7-f979-4657-822f-ee79f0cb5bac"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "uceksen-files"
+
+[observability]
+enabled = true
