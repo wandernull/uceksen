@@ -5,6 +5,15 @@ compatibility_flags = ["nodejs_compat"]
 account_id = "ef35eded2f130806ec2824e2920866ee"
 workers_dev = true
 
+# Static pages from public/. Matching files are served directly; everything else
+# (APIs, dynamic pages) falls through to the Worker. /rehber serves rehber.html,
+# /rehber.html redirects to /rehber.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+
 # Single deployment. ENVIRONMENT stays "staging" until go-live (Phase 9) so the
 # DEV_EMAIL guard is active. Locally, .dev.vars overrides it to "local".
 [vars]

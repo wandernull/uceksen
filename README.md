@@ -11,7 +11,9 @@ Cloudflare Workers + Hono + D1 + R2. One deployment: `https://uceksen.gizemderin
 | `AGENTS.md` | Pointer for any AI agent entering the repo. |
 | `SPEC.md` | Technical specification. What gets built. |
 | `PROGRESS.md` | Live state, decisions log, what is blocked on you. |
-| `design/` | UI prototype and design system. Not to be changed. |
+| `design/` | Original UI prototype — reference only, never edited. |
+| `public/` | Live static pages and assets (ported from `design/`). `public/styles.css` must stay byte-identical to `design/styles.css`; additions go in `public/site.css`. |
+| `scripts/check-layout.mjs` | Browser layout check: phone widths, light/dark, focus, fonts. |
 | `src/` | Worker source (Hono). |
 | `migrations/` | D1 schema, plain SQL, numbered `0001_`, `0002_`, … |
 | `test/` | Vitest, running inside the Workers runtime. |
@@ -33,6 +35,8 @@ npm run db:migrate:local
 npm run dev          # http://localhost:8787, /health should return 200
 npm test
 npm run typecheck
+npm run check:design   # public/styles.css == design/styles.css
+npm run test:layout    # needs `npm run dev` running + Google Chrome installed
 ```
 
 After changing `wrangler.toml` bindings or vars: `npx wrangler types --env-interface Env`.

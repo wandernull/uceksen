@@ -1,0 +1,18 @@
+/* Additions to the design system. styles.css is the prototype's stylesheet and is
+   kept byte-identical to design/styles.css; anything new goes here, tokens only. */
+
+/* Visible keyboard focus on every interactive element (styles.css only covers .btn and inputs). */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+select:focus-visible,
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.btn:focus-visible { outline-color: var(--ink); outline-offset: 3px; }
+.path:focus-visible { outline-offset: 0; border-color: var(--accent); }
+
+/* Long unbroken strings (emails, tokens, URLs) must never force horizontal scroll. */
+main { overflow-wrap: anywhere; }
