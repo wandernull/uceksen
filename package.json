@@ -9,7 +9,7 @@
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "cf-typegen": "wrangler types --env-interface Env --strict-vars=false",
     "test:layout": "node scripts/check-layout.mjs",
     "check:design": "cmp design/styles.css public/styles.css && echo \"styles.css matches design/\""
   },

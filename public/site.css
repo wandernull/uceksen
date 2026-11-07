@@ -1,6 +1,10 @@
 /* Additions to the design system. styles.css is the prototype's stylesheet and is
    kept byte-identical to design/styles.css; anything new goes here, tokens only. */
 
+/* styles.css gives .modal-form/.modal-done display:flex, which overrides the
+   hidden attribute — the prototype showed form and success panel together. */
+[hidden] { display: none !important; }
+
 /* Visible keyboard focus on every interactive element (styles.css only covers .btn and inputs). */
 a:focus-visible,
 button:focus-visible,
@@ -16,3 +20,15 @@ input[type="radio"]:focus-visible {
 
 /* Long unbroken strings (emails, tokens, URLs) must never force horizontal scroll. */
 main { overflow-wrap: anywhere; }
+
+/* Honeypot: off-screen, not display:none (some bots skip hidden fields). */
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+.form-error {
+  font-size: .9rem;
+  line-height: 1.45;
+  color: var(--ink);
+  border-left: 3px solid var(--accent);
+  padding: .35rem 0 .35rem .8rem;
+}
+button.btn:disabled { opacity: .6; cursor: progress; }

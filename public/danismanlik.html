@@ -111,7 +111,8 @@
 </footer>
 
 <dialog class="modal" id="talepModal" aria-labelledby="talepBaslik">
-  <form class="modal-form" id="talepForm" novalidate>
+  <form class="modal-form" id="talepForm" method="post" action="/api/talep" novalidate>
+    <input type="hidden" name="kaynak" value="danismanlik">
     <div class="modal-head">
       <h2 id="talepBaslik">Durum Analizi talebi</h2>
       <button class="modal-x" type="button" data-close aria-label="Kapat">&times;</button>
@@ -133,6 +134,13 @@
     <label class="check"><input type="checkbox" id="f-onay" name="onay" required> Bu talebin değerlendirilmesi için bilgilerimin işlenmesini kabul ediyorum.</label>
     <p class="small">Bilgilerini nasıl sakladığımızı <a href="/gizlilik">gizlilik metninde</a> anlattık.</p>
 
+    <div class="hp" aria-hidden="true">
+      <label for="f-web">Web sitesi</label>
+      <input id="f-web" name="website" type="text" tabindex="-1" autocomplete="off">
+    </div>
+
+    <p class="form-error" id="talepHata" role="alert" hidden></p>
+
     <button class="btn" type="submit">Talebi gönder</button>
   </form>
 
@@ -143,44 +151,7 @@
   </div>
 </dialog>
 
-<script>
-(function () {
-  var modal = document.getElementById('talepModal');
-  var form = document.getElementById('talepForm');
-  var done = document.getElementById('talepDone');
-  if (!modal || !form || !done) return;
-
-  function open() {
-    form.hidden = false;
-    done.hidden = true;
-    form.reset();
-    if (typeof modal.showModal === 'function') { modal.showModal(); }
-    else { modal.setAttribute('open', ''); }
-  }
-  function close() {
-    if (typeof modal.close === 'function') { modal.close(); }
-    else { modal.removeAttribute('open'); }
-  }
-
-  document.querySelectorAll('[data-open]').forEach(function (el) {
-    el.addEventListener('click', open);
-  });
-  modal.querySelectorAll('[data-close]').forEach(function (el) {
-    el.addEventListener('click', close);
-  });
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal) close();
-  });
-
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (!form.checkValidity()) { form.reportValidity(); return; }
-    // Gerçek sitede: POST /api/talep → kayıt + merhaba@uceksen.com'dan onay e-postası
-    form.hidden = true;
-    done.hidden = false;
-  });
-})();
-</script>
+<script src="/talep.js" defer></script>
 
 </body>
 </html>

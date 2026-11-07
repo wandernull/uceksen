@@ -8,6 +8,8 @@ export default defineConfig({
       miniflare: {
         bindings: {
           ENVIRONMENT: "test",
+          ADMIN_EMAILS: "gizem=gizem@example.com,baran=baran@example.com",
+          DEV_EMAIL: "dev@example.com",
           TEST_MIGRATIONS: await readD1Migrations("./migrations"),
         },
       },

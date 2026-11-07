@@ -19,12 +19,21 @@ not_found_handling = "none"
 [vars]
 ENVIRONMENT = "staging"
 APP_URL = "https://uceksen.gizemderinkok.workers.dev"
+# Cloudflare Access (Zero Trust) for /admin. Empty = /admin refuses everyone on
+# the deployed Worker. Filled in once the Access application exists.
+ACCESS_TEAM_DOMAIN = ""
+ACCESS_AUD = ""
+# ADMIN_EMAILS is a secret (wrangler secret put): "gizem=a@x.com,baran=b@y.com"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "uceksen-db"
 database_id = "8cef0ac7-f979-4657-822f-ee79f0cb5bac"
 migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "f05d599c3a54463db998dc1cd52de224"
 
 [[r2_buckets]]
 binding = "BUCKET"

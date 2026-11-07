@@ -48,6 +48,12 @@ The `CLOUDFLARE_API_TOKEN` repo secret must be set. Manual deploy: `npm run db:m
 
 Secrets go in with `npx wrangler secret put NAME`, never into the repo.
 
+| Secret | Purpose |
+|---|---|
+| `ADMIN_EMAILS` | `gizem=…,baran=…` — who may use `/admin` (must match the Access policy); the name is the message author |
+
+`/admin` sits behind Cloudflare Access (self-hosted application on the `/admin` path). The Worker also verifies the Access JWT itself using the `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` vars in `wrangler.toml`; while those are empty, `/admin` returns 403 on the deployed Worker. Locally (`ENVIRONMENT=local`) there is no Access and you act as the first admin in `ADMIN_EMAILS`.
+
 `ENVIRONMENT` is `"staging"` on the deployed Worker until go-live, which keeps every outgoing email redirected to `DEV_EMAIL`. Switching it to `"production"` is part of Phase 9.
 
 ## Language

@@ -1,3 +1,6 @@
 # Copy to .dev.vars for local development. Never commit .dev.vars.
 ENVIRONMENT=local
 APP_URL=http://localhost:8787
+DEV_EMAIL=you@example.com
+# name=email pairs; the name is the message author shown in /admin (gizem | baran)
+ADMIN_EMAILS=gizem=gizem@example.com,baran=baran@example.com

@@ -68,6 +68,69 @@ for (const [theme, expected] of Object.entries(THEMES)) {
   }
 }
 
+// End to end: submit the request form in the browser, then find it in /admin.
+let adminPages = [];
+{
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 800 } });
+  const page = await ctx.newPage();
+  const stamp = Date.now();
+  await page.goto(BASE + "/danismanlik");
+  await page.click("[data-open]");
+  checks++;
+  if (await page.isVisible("#talepDone")) fail("modal open: success panel visible before submitting");
+  if (await page.isVisible("#talepHata")) fail("modal open: error box visible before submitting");
+  await page.fill("#f-ad", `Layout Test ${stamp}`);
+  await page.fill("#f-mail", `layout-${stamp}@example.com`);
+  await page.fill("#f-durum", "Tarayıcıdan gönderilen test talebi.\nİkinci satır — çok uzun bir kelime: " + "a".repeat(120));
+  await page.check("#f-onay");
+  await page.click("#talepForm button[type=submit]");
+  await page.waitForSelector("#talepDone:not([hidden])", { timeout: 5000 }).catch(() => {});
+  checks++;
+  if (!(await page.isVisible("#talepDone"))) fail(`form submit: success panel not shown (error: ${await page.textContent("#talepHata")})`);
+  if (await page.isVisible("#talepForm")) fail("form submit: form still visible after success");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/modal-done-375.png` });
+
+  const res = await page.goto(BASE + "/admin");
+  checks++;
+  if (res?.status() !== 200) fail(`/admin: HTTP ${res?.status()} (admin checks need ENVIRONMENT=local)`);
+  else {
+    const link = page.locator(`a:has-text("Layout Test ${stamp}")`);
+    if ((await link.count()) !== 1) fail("/admin: submitted request not listed");
+    else {
+      const href = await link.getAttribute("href");
+      adminPages = ["/admin", href];
+      await page.goto(BASE + href);
+      await page.selectOption("#durum", "ours");
+      await page.click(".state-form button");
+      await page.waitForURL(/kaydedildi=1/);
+      if ((await page.inputValue("#durum")) !== "ours") fail("/admin detail: state change not saved");
+    }
+  }
+  await ctx.close();
+}
+for (const [theme, expected] of Object.entries(THEMES)) {
+  for (const width of [320, 375, 1280]) {
+    const ctx = await browser.newContext({ viewport: { width, height: 800 }, colorScheme: theme });
+    const page = await ctx.newPage();
+    for (const path of adminPages) {
+      const where = `${path} @${width}px ${theme}`;
+      await page.goto(BASE + path, { waitUntil: "networkidle" });
+      checks++;
+      const m = await page.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth,
+        bg: getComputedStyle(document.body).backgroundColor,
+      }));
+      if (m.scrollW > m.clientW) fail(`${where}: horizontal scroll (${m.scrollW} > ${m.clientW})`);
+      if (m.bg !== expected.paper) fail(`${where}: body background ${m.bg}`);
+      if (SHOTS && width !== 1280) {
+        const name = path === "/admin" ? "admin-list" : "admin-detail";
+        await page.screenshot({ path: `${SHOTS}/${name}-${width}-${theme}.png`, fullPage: true });
+      }
+    }
+    await ctx.close();
+  }
+}
+
 // The contact modal must also fit on the smallest phone.
 {
   const ctx = await browser.newContext({ viewport: { width: 320, height: 640 } });
@@ -82,7 +145,7 @@ for (const [theme, expected] of Object.entries(THEMES)) {
 }
 
 await browser.close();
-console.log(`${checks} page renders checked (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes + modal)`);
+console.log(`${checks} checks (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes, form → admin flow, admin pages × 3 widths × 2 themes, modal)`);
 if (failures.length) {
   console.error(`FAILED (${failures.length}):\n` + failures.map((f) => "  - " + f).join("\n"));
   process.exit(1);
