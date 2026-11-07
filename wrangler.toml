@@ -21,8 +21,8 @@ ENVIRONMENT = "staging"
 APP_URL = "https://uceksen.gizemderinkok.workers.dev"
 # Cloudflare Access (Zero Trust) for /admin. Empty = /admin refuses everyone on
 # the deployed Worker. Filled in once the Access application exists.
-ACCESS_TEAM_DOMAIN = ""
-ACCESS_AUD = ""
+ACCESS_TEAM_DOMAIN = "twilight-surf-1e57.cloudflareaccess.com"
+ACCESS_AUD = "3cd68cb34b43442be78fbe69bbd46d5292f1e697a9a0cd94879bf00636db5d0b"
 # ADMIN_EMAILS is a secret (wrangler secret put): "gizem=a@x.com,baran=b@y.com"
 
 [[d1_databases]]

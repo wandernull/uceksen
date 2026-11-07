@@ -78,19 +78,26 @@ describe("/admin on a deployed environment", () => {
     return res;
   }
 
+  it("redirects the bare /admin (not covered by the Access path rule) to /admin/, keeping the query", async () => {
+    for (const [from, to] of [["/admin", "/admin/"], ["/admin?durum=new", "/admin/?durum=new"]] as const) {
+      const res = await call(from);
+      expect(res.status).toBe(301);
+      expect(res.headers.get("location")).toBe(to);
+    }
+  });
   it("refuses requests without an Access token", async () => {
-    expect((await call("/admin")).status).toBe(403);
+    expect((await call("/admin/")).status).toBe(403);
   });
   it("refuses everything while Access is not configured", async () => {
     const t = await sign(goodClaims());
-    expect((await call("/admin", { "cf-access-jwt-assertion": t }, { ACCESS_AUD: "", ACCESS_TEAM_DOMAIN: "" })).status).toBe(403);
+    expect((await call("/admin/", { "cf-access-jwt-assertion": t }, { ACCESS_AUD: "", ACCESS_TEAM_DOMAIN: "" })).status).toBe(403);
   });
   it("refuses a valid token for an email not in ADMIN_EMAILS", async () => {
     const t = await sign(goodClaims({ email: "stranger@example.com" }));
-    expect((await call("/admin", { "cf-access-jwt-assertion": t })).status).toBe(403);
+    expect((await call("/admin/", { "cf-access-jwt-assertion": t })).status).toBe(403);
   });
   it("lets an admin in, with no-store and noindex", async () => {
-    const res = await call("/admin", { "cf-access-jwt-assertion": await sign(goodClaims()) });
+    const res = await call("/admin/", { "cf-access-jwt-assertion": await sign(goodClaims()) });
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("x-robots-tag")).toContain("noindex");
@@ -113,7 +120,7 @@ describe("/admin conversations (test env, no Access in front)", () => {
 
   it("a submitted form appears in the list and in the detail view", async () => {
     const id = await submit("liste@example.com", "Zeynep Kaya", "İki ülkede gelirim var <script>alert(1)</script>");
-    const list = await (await SELF.fetch("https://example.com/admin")).text();
+    const list = await (await SELF.fetch("https://example.com/admin/")).text();
     expect(list).toContain("Zeynep Kaya");
     expect(list).toContain(`href="/admin/konusma/${id}"`);
     expect(list).toContain("Yeni");
@@ -142,9 +149,9 @@ describe("/admin conversations (test env, no Access in front)", () => {
     const row = await env.DB.prepare("SELECT state FROM conversations WHERE id = ?").bind(id).first<{ state: string }>();
     expect(row?.state).toBe("ours");
 
-    const ours = await (await SELF.fetch("https://example.com/admin?durum=ours")).text();
+    const ours = await (await SELF.fetch("https://example.com/admin/?durum=ours")).text();
     expect(ours).toContain("Can Demir");
-    const fresh = await (await SELF.fetch("https://example.com/admin?durum=new")).text();
+    const fresh = await (await SELF.fetch("https://example.com/admin/?durum=new")).text();
     expect(fresh).not.toContain("Can Demir");
   });
 

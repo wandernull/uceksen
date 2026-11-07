@@ -5,7 +5,16 @@ import { health } from "./routes/health";
 import { pages } from "./routes/pages";
 import { talep } from "./routes/talep";
 
-const app = new Hono<AppEnv>();
+// strict: false so "/admin/" (the URL Cloudflare Access protects) matches the "/admin" routes.
+const app = new Hono<AppEnv>({ strict: false });
+
+// Access's path rule "admin" covers "/admin/*" but not the bare "/admin", so send that
+// to the canonical "/admin/". The Worker's own JWT check still guards every admin route.
+app.use("*", async (c, next) => {
+  const url = new URL(c.req.url);
+  if (url.pathname === "/admin") return c.redirect(`/admin/${url.search}`, 301);
+  await next();
+});
 
 app.route("/health", health);
 app.route("/api/talep", talep);

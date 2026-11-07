@@ -76,7 +76,7 @@ export function MessagePage(props: { title: string; eyebrow: string; heading: st
   );
 }
 
-const ADMIN_NAV = [["/admin", "Konuşmalar"]] as const;
+const ADMIN_NAV = [["/admin/", "Konuşmalar"]] as const;
 
 export function AdminLayout({ title, current, adminName, children }: { title: string; current: string; adminName: string; children: Child }) {
   return (
@@ -85,7 +85,7 @@ export function AdminLayout({ title, current, adminName, children }: { title: st
       <body>
         <nav class="nav">
           <div class="nav-inner admin-inner gutter">
-            <a class="brand" href="/admin">Üç Eksen · Yönetim</a>
+            <a class="brand" href="/admin/">Üç Eksen · Yönetim</a>
             <div class="nav-links">
               {ADMIN_NAV.map(([href, label]) => (
                 <a href={href} aria-current={href === current ? "page" : undefined}>{label}</a>

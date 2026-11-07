@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-11-07
 **Active phase:** Phase 2 — Form and admin
-**Status:** ⏸ code done — blocked on user: Cloudflare Access setup
+**Status:** ⏸ Access configured and deployed — blocked on user: test the admin login
 
 ---
 
@@ -15,7 +15,7 @@
 |---|---|---|---|
 | 0 | Skeleton | ✅ | `8b74e18` |
 | 1 | Static pages | ✅ | `bbdf3c0` |
-| 2 | Form and admin | ⏸ | commit `phase 2: …` (hash recorded at next update) |
+| 2 | Form and admin | ⏸ | `7aadf1b` + Access follow-up commit |
 | 3 | Email | ⬜ | — |
 | 4 | Guide sales | ⬜ | — |
 | 5 | Booking (without Google) | ⬜ | — |
@@ -30,20 +30,13 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Waiting for the Cloudflare Access setup (see "Blocked on user"). After that: set `ACCESS_TEAM_DOMAIN` + `ACCESS_AUD`, deploy, verify admin login together with the user, mark Phase 2 done.
+Cloudflare Access is set up and the Worker is configured with it (`ACCESS_TEAM_DOMAIN = twilight-surf-1e57.cloudflareaccess.com`, `ACCESS_AUD = 3cd68cb3…5d0b`). Verified with curl: `/admin/` and `/admin/konusma/1` redirect to the Access login; `/` and `/rehber` stay public; bare `/admin` is redirected by the Worker to `/admin/`. Remaining: user logs in once to confirm the end-to-end flow, then Phase 2 is done.
 
 ## Blocked on user
 
-**Cloudflare Access for `/admin`** (SPEC §11 step 2, ~10 min):
-1. Cloudflare dashboard → **Zero Trust**. If asked, pick a team name (free plan is enough) → this gives `<team>.cloudflareaccess.com`.
-2. **Access → Applications → Add an application → Self-hosted.**
-   - Name: `Üç Eksen admin`
-   - Public hostname: domain `uceksen.gizemderinkok.workers.dev`, path `admin`
-   - Session duration: 24 hours (or what you prefer)
-3. Policy: name `Admins`, action **Allow**, include **Emails**: `gizemderinkok@gmail.com`, `bbartu.demirci@gmail.com`.
-4. Login method: the default **One-time PIN** works (code sent by email). Google login is optional.
-5. Do **not** use the one-click "Enable Cloudflare Access" button on the Worker's workers.dev setting — that would lock the whole site.
-6. Send the agent: the **team domain** (`<team>.cloudflareaccess.com`) and the application's **Application Audience (AUD) tag** (Access → Applications → the app → Overview/Basic information). Neither is secret.
+**Test the admin login:** open https://uceksen.gizemderinkok.workers.dev/admin → enter your email → enter the code from the email → the "Konuşmalar" list should appear with your name top right. Reply with what you see.
+
+How Access was set up (dashboard as of 2026-11, for reference): Zero Trust → Access controls → Applications → Self-hosted and private → *Workers* → **don't** pick a Worker type (both "production and preview URLs" and "preview URLs" protect the whole Worker; neither takes a path) → instead Destinations → **+ Add public hostname**: subdomain `uceksen`, domain `gizemderinkok.workers.dev`, path `admin`. Policy `Admins` (Allow, Include → Emails: the two admin addresses). Authentication: One-time PIN (had to be added first under login methods; only "Cloudflare" was listed), instant authentication on. App name in dashboard: `uceksen`.
 
 ## Preparation status (SPEC §10), as of 2026-11-07
 
@@ -82,7 +75,7 @@ Waiting for the Cloudflare Access setup (see "Blocked on user"). After that: set
 - `public/_headers`: nosniff, referrer policy, `X-Frame-Options: DENY`, permissions policy, long cache on fonts
 - Worker falls back to `ASSETS` for unmatched paths (needed for tests; no effect in production)
 
-**Phase 2 — Form and admin (2026-11-07, code done; Access setup pending)**
+**Phase 2 — Form and admin (2026-11-07, code done; Access configured; login test pending)**
 - `POST /api/talep` (JSON from the modal, form-encoded as no-JS fallback → Turkish HTML page): honeypot `website` (200, nothing stored), KV rate limit 5/hour/IP (`KV` namespace `uceksen-kv`), validation with Turkish messages, then one D1 batch: upsert `contacts` by email (lower-cased), new `conversations` (state `new`, 32-char base64url `reply_token` + `plus_token`, `source`, `consent_at`), first `messages` row (`in`, `customer`)
 - Migration `0002`: `conversations.source`, `conversations.consent_at`
 - Modal script moved to `public/talep.js` (shared by `/danismanlik` and `/hakkimizda`), real submit, inline error box, disabled button while sending
@@ -112,6 +105,7 @@ Waiting for the Cloudflare Access setup (see "Blocked on user"). After that: set
 - **2026-11-07 — Consulting flow follows the design, not SPEC §5.4 step 1** (confirmed by user). Customer submits the request form → admins evaluate in the conversation → admin sends a Stripe payment link from the admin conversation → after payment the customer picks a slot (SPEC §5.4 from step 2 on is unchanged). `/danismanlik` has no direct checkout.
 - **2026-11-07 — Rate limiting in KV** (global standard: KV for edge state). Fixed window; soft limit because KV is eventually consistent across locations — acceptable for form abuse.
 - **2026-11-07 — Worker verifies the Access JWT in addition to Access itself.** Not a password mechanism (CLAUDE.md forbids that); it guards against a misconfigured or bypassed Access app. Fails closed.
+- **2026-11-07 — Canonical admin URL is `/admin/`.** The Access path rule `admin` covers `/admin/` and below but not the bare `/admin` (it reached the Worker and got 403). The Worker now 301-redirects `/admin` → `/admin/` (query kept) and routes non-strictly; all admin links point at `/admin/`. The Worker's JWT check still guards every admin route.
 - **2026-11-07 — `ADMIN_EMAILS` format `gizem=…,baran=…`** (SPEC said plain comma-separated) so the admin's identity maps to `messages.author`. Kept as a secret because the repo is public.
 - **2026-11-07 — Each form submission opens a new conversation**, even for a known email (SPEC §5.1). The contact is upserted; empty phone does not erase a stored one.
 - **2026-11-07 — Google refresh token encrypted at rest** (AES-GCM, key from `ENCRYPTION_KEY` secret) instead of plaintext in `settings`.
@@ -133,4 +127,4 @@ Waiting for the Cloudflare Access setup (see "Blocked on user"). After that: set
 
 ## Next step
 
-User sets up Cloudflare Access → agent configures + verifies → Phase 2 done. Then Phase 3 (email) — before it: domain, DNS permission on the token, Resend account + API key, MX approval.
+User confirms the admin login works → Phase 2 done. Then Phase 3 (email) — before it: domain, DNS permission on the token, Resend account + API key, MX approval.

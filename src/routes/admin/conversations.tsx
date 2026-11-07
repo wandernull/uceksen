@@ -55,16 +55,16 @@ admin.get("/", async (c) => {
   return c.html(
     "<!doctype html>" +
       (
-        <AdminLayout title="Konuşmalar" current="/admin" adminName={me.author === "gizem" ? "Gizem" : "Baran"}>
+        <AdminLayout title="Konuşmalar" current="/admin/" adminName={me.author === "gizem" ? "Gizem" : "Baran"}>
           <header>
             <p class="eyebrow">Yönetim</p>
             <h1>Konuşmalar</h1>
           </header>
           <section>
             <nav class="filters" aria-label="Duruma göre süz">
-              <a href="/admin" aria-current={state === null ? "page" : undefined}>Tümü <span>{total}</span></a>
+              <a href="/admin/" aria-current={state === null ? "page" : undefined}>Tümü <span>{total}</span></a>
               {STATES.map((s) => (
-                <a href={`/admin?durum=${s}`} aria-current={state === s ? "page" : undefined}>
+                <a href={`/admin/?durum=${s}`} aria-current={state === s ? "page" : undefined}>
                   {STATE_LABEL[s]} <span>{countBy[s] ?? 0}</span>
                 </a>
               ))}
@@ -120,9 +120,9 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
   return c.html(
     "<!doctype html>" +
       (
-        <AdminLayout title={conv.name || conv.email} current="/admin" adminName={me.author === "gizem" ? "Gizem" : "Baran"}>
+        <AdminLayout title={conv.name || conv.email} current="/admin/" adminName={me.author === "gizem" ? "Gizem" : "Baran"}>
           <header>
-            <p class="eyebrow"><a href="/admin">← Konuşmalar</a></p>
+            <p class="eyebrow"><a href="/admin/">← Konuşmalar</a></p>
             <h1 class="admin-h1">{conv.name || conv.email}</h1>
             <p class="lede">{conv.subject ?? "—"}</p>
           </header>

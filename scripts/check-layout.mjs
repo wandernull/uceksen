@@ -90,7 +90,7 @@ let adminPages = [];
   if (await page.isVisible("#talepForm")) fail("form submit: form still visible after success");
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/modal-done-375.png` });
 
-  const res = await page.goto(BASE + "/admin");
+  const res = await page.goto(BASE + "/admin/");
   checks++;
   if (res?.status() !== 200) fail(`/admin: HTTP ${res?.status()} (admin checks need ENVIRONMENT=local)`);
   else {
@@ -98,7 +98,7 @@ let adminPages = [];
     if ((await link.count()) !== 1) fail("/admin: submitted request not listed");
     else {
       const href = await link.getAttribute("href");
-      adminPages = ["/admin", href];
+      adminPages = ["/admin/", href];
       await page.goto(BASE + href);
       await page.selectOption("#durum", "ours");
       await page.click(".state-form button");
@@ -123,7 +123,7 @@ for (const [theme, expected] of Object.entries(THEMES)) {
       if (m.scrollW > m.clientW) fail(`${where}: horizontal scroll (${m.scrollW} > ${m.clientW})`);
       if (m.bg !== expected.paper) fail(`${where}: body background ${m.bg}`);
       if (SHOTS && width !== 1280) {
-        const name = path === "/admin" ? "admin-list" : "admin-detail";
+        const name = path === "/admin/" ? "admin-list" : "admin-detail";
         await page.screenshot({ path: `${SHOTS}/${name}-${width}-${theme}.png`, fullPage: true });
       }
     }
