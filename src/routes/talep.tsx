@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { allow, clientIp } from "../lib/rate-limit";
 import { nowIso } from "../lib/time";
-import { randomToken } from "../lib/tokens";
+import { ackBody, notifyNewMessage, sendOutgoing } from "../lib/conversations";
+import { randomMailToken, randomToken } from "../lib/tokens";
 import { MessagePage } from "../views/layout";
 
 export const talep = new Hono<AppEnv>();
@@ -54,10 +55,10 @@ export function validate(raw: Record<string, unknown>): { ok: true; value: Talep
 }
 
 /** Upserts the contact and creates conversation + first message in one transaction. */
-export async function storeTalep(db: D1Database, t: TalepInput): Promise<{ replyToken: string }> {
+export async function storeTalep(db: D1Database, t: TalepInput): Promise<{ replyToken: string; convId: number }> {
   const now = nowIso();
   const replyToken = randomToken();
-  const plusToken = randomToken();
+  const plusToken = randomMailToken();
   await db.batch([
     db
       .prepare(
@@ -73,12 +74,13 @@ export async function storeTalep(db: D1Database, t: TalepInput): Promise<{ reply
       .bind(t.email, SOURCES[t.source], replyToken, plusToken, now, t.source),
     db
       .prepare(
-        `INSERT INTO messages (conversation_id, direction, body_text, author, created_at)
-         VALUES ((SELECT id FROM conversations WHERE reply_token = ?1), 'in', ?2, 'customer', ?3)`,
+        `INSERT INTO messages (conversation_id, direction, body_text, author, created_at, via)
+         VALUES ((SELECT id FROM conversations WHERE reply_token = ?1), 'in', ?2, 'customer', ?3, 'form')`,
       )
       .bind(replyToken, t.body, now),
   ]);
-  return { replyToken };
+  const row = await db.prepare("SELECT id FROM conversations WHERE reply_token = ?1").bind(replyToken).first<{ id: number }>();
+  return { replyToken, convId: row!.id };
 }
 
 talep.post("/", async (c) => {
@@ -119,12 +121,16 @@ talep.post("/", async (c) => {
   const v = validate(raw);
   if (!v.ok) return reply(400, false, v.error);
 
+  let convId: number;
   try {
-    await storeTalep(c.env.DB, v.value);
+    ({ convId } = await storeTalep(c.env.DB, v.value));
   } catch (err) {
     console.error("talep store failed", err);
     return reply(500, false, MSG.error);
   }
-  // Phase 3: acknowledgement email to the customer + admin notification.
+  // The request is stored; email problems must not turn it into an error for the visitor.
+  // A failed acknowledgement shows up in /admin with a resend button.
+  await sendOutgoing(c.env, convId, "system", ackBody(v.value.name, v.value.body), { via: "form" });
+  await notifyNewMessage(c.env, convId, "Yeni talep", v.value.body);
   return reply(200, true, MSG.ok);
 });

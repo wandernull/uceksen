@@ -47,11 +47,13 @@ describe("POST /api/talep", () => {
     const conv = convs[0]!;
     expect(conv).toMatchObject({ state: "new", subject: "Durum Analizi talebi", source: "danismanlik" });
     expect(conv.consent_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
-    expect(conv.last_message_at).toBe(conv.created_at);
-    for (const t of [conv.reply_token, conv.plus_token]) expect(t).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(String(conv.last_message_at) >= String(conv.created_at)).toBe(true); // the acknowledgement moves it on
+    expect(conv.reply_token).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(conv.plus_token).toMatch(/^[a-z2-7]{32}$/); // lower-case: survives mail systems changing case
     expect(conv.reply_token).not.toBe(conv.plus_token);
-    expect(msgs).toHaveLength(1);
-    expect(msgs[0]).toMatchObject({ direction: "in", author: "customer", body_text: "Hollanda'da şirketim var,\nİspanya'ya oturum düşünüyorum." });
+    expect(msgs).toHaveLength(2); // customer's message + our acknowledgement
+    expect(msgs[1]).toMatchObject({ direction: "out", author: "system" });
+    expect(msgs[0]).toMatchObject({ direction: "in", author: "customer", via: "form", body_text: "Hollanda'da şirketim var,\nİspanya'ya oturum düşünüyorum." });
   });
 
   it("honeypot filled: 200, nothing stored", async () => {

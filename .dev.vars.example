@@ -2,5 +2,8 @@
 ENVIRONMENT=local
 APP_URL=http://localhost:8787
 DEV_EMAIL=you@example.com
+RESEND_API_KEY=re_...
+# Signing secret of the Resend webhook (whsec_...); only needed to test inbound locally
+RESEND_INBOUND_SECRET=whsec_...
 # name=email pairs; the name is the message author shown in /admin (gizem | baran)
 ADMIN_EMAILS=gizem=gizem@example.com,baran=baran@example.com

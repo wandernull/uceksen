@@ -29,10 +29,10 @@ function Head({ title, extraCss = [], noindex = false }: { title: string; extraC
 }
 
 /** Customer-facing page shell: same nav and footer as the static pages in public/. */
-export function SiteLayout({ title, current, children }: { title: string; current?: string; children: Child }) {
+export function SiteLayout({ title, current, noindex, children }: { title: string; current?: string; noindex?: boolean; children: Child }) {
   return (
     <html lang="tr">
-      <Head title={title} />
+      <Head title={title} noindex={noindex} />
       <body>
         <nav class="nav">
           <div class="nav-inner gutter">
@@ -76,7 +76,7 @@ export function MessagePage(props: { title: string; eyebrow: string; heading: st
   );
 }
 
-const ADMIN_NAV = [["/admin/", "Konuşmalar"]] as const;
+const ADMIN_NAV = [["/admin/", "Konuşmalar"], ["/admin/eslesmeyen", "Eşleşmeyen"]] as const;
 
 export function AdminLayout({ title, current, adminName, children }: { title: string; current: string; adminName: string; children: Child }) {
   return (

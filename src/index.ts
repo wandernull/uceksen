@@ -2,8 +2,10 @@ import { Hono } from "hono";
 import type { AppEnv } from "./env";
 import { admin } from "./routes/admin/conversations";
 import { health } from "./routes/health";
+import { konusma } from "./routes/konusma";
 import { pages } from "./routes/pages";
 import { talep } from "./routes/talep";
+import { webhooks } from "./routes/webhooks";
 
 // strict: false so "/admin/" (the URL Cloudflare Access protects) matches the "/admin" routes.
 const app = new Hono<AppEnv>({ strict: false });
@@ -18,6 +20,8 @@ app.use("*", async (c, next) => {
 
 app.route("/health", health);
 app.route("/api/talep", talep);
+app.route("/api/webhooks", webhooks);
+app.route("/konusma", konusma);
 app.route("/admin", admin);
 app.route("/", pages);
 

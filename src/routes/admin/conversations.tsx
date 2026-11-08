@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 import type { AppEnv } from "../../env";
 import { requireAdmin } from "../../lib/admin-auth";
+import { attachmentsFor, formatSize, serveAttachment } from "../../lib/attachments";
+import { conversationUrl, deliverMessage, sendOutgoing } from "../../lib/conversations";
 import { getHostTz } from "../../lib/settings";
 import { formatTr } from "../../lib/time";
 import { AdminLayout } from "../../views/layout";
@@ -97,25 +99,35 @@ admin.get("/", async (c) => {
 
 type Conv = {
   id: number; subject: string | null; state: State; created_at: string; last_message_at: string | null;
-  source: string | null; consent_at: string | null; name: string | null; email: string; phone: string | null;
+  source: string | null; consent_at: string | null; reply_token: string; name: string | null; email: string; phone: string | null;
 };
-type Msg = { id: number; direction: "in" | "out"; body_text: string | null; author: string; created_at: string };
+type Msg = {
+  id: number; direction: "in" | "out"; body_text: string | null; author: string; created_at: string;
+  via: string | null; send_status: string | null; send_error: string | null; from_addr: string | null;
+};
+
+const VIA_LABEL: Record<string, string> = { form: "form", email: "e-posta", web: "web", admin: "e-posta" };
+const REPLY_MAX = 10000;
 
 admin.get("/konusma/:id{[0-9]+}", async (c) => {
   const id = Number(c.req.param("id"));
   const [tz, conv, msgs] = await Promise.all([
     getHostTz(c.env.DB),
     c.env.DB.prepare(
-      `SELECT c.id, c.subject, c.state, c.created_at, c.last_message_at, c.source, c.consent_at, ct.name, ct.email, ct.phone
+      `SELECT c.id, c.subject, c.state, c.created_at, c.last_message_at, c.source, c.consent_at, c.reply_token, ct.name, ct.email, ct.phone
          FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = ?1`,
     ).bind(id).first<Conv>(),
     c.env.DB.prepare(
-      "SELECT id, direction, body_text, author, created_at FROM messages WHERE conversation_id = ?1 ORDER BY created_at, id",
+      `SELECT id, direction, body_text, author, created_at, via, send_status, send_error, from_addr
+         FROM messages WHERE conversation_id = ?1 ORDER BY created_at, id`,
     ).bind(id).all<Msg>(),
   ]);
+  const atts = await attachmentsFor(c.env.DB, id);
   if (!conv) return c.text("Konuşma bulunamadı.", 404);
   const me = c.get("admin");
   const saved = c.req.query("kaydedildi") === "1";
+  const replied = c.req.query("gonderildi");
+  const customerUrl = conv ? conversationUrl(c.env, conv.reply_token) : "";
 
   return c.html(
     "<!doctype html>" +
@@ -134,6 +146,7 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
               <dt>Kaynak</dt><dd>{conv.source ? (SOURCE_LABEL[conv.source] ?? conv.source) : "—"}</dd>
               <dt>Başlangıç</dt><dd>{formatTr(conv.created_at, tz)}</dd>
               <dt>Onay</dt><dd>{conv.consent_at ? formatTr(conv.consent_at, tz) : "—"}</dd>
+              <dt>Müşteri sayfası</dt><dd><a href={customerUrl} rel="noreferrer">{customerUrl}</a></dd>
             </dl>
             <form class="state-form" method="post" action={`/admin/konusma/${conv.id}/durum`}>
               <label for="durum">Durum</label>
@@ -154,12 +167,43 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
                 <li class={`msg msg-${m.direction}`}>
                   <p class="msg-head">
                     <span>{AUTHOR_LABEL[m.author] ?? m.author}</span>
-                    <time datetime={m.created_at}>{formatTr(m.created_at, tz)}</time>
+                    <span class="msg-meta">
+                      {m.direction === "out" ? "e-posta · " : m.via ? `${VIA_LABEL[m.via] ?? m.via} · ` : ""}
+                      <time datetime={m.created_at}>{formatTr(m.created_at, tz)}</time>
+                    </span>
                   </p>
+                  {m.from_addr && m.from_addr !== conv.email.toLowerCase() && (
+                    <p class="msg-warn">Farklı bir adresten geldi: {m.from_addr}</p>
+                  )}
                   <p class="msg-body">{m.body_text ?? ""}</p>
+                  {atts.get(m.id)?.length ? (
+                    <ul class="attachments">
+                      {atts.get(m.id)!.map((a) => (
+                        <li><a href={`/admin/ek/${a.id}`}>{a.filename}</a> <span>{formatSize(a.size)}</span></li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {m.send_status === "failed" && (
+                    <form class="msg-retry" method="post" action={`/admin/mesaj/${m.id}/tekrar`}>
+                      <span class="msg-warn">Gönderilemedi{m.send_error ? `: ${m.send_error}` : ""}</span>
+                      <button class="btn-ghost btn-small" type="submit">Tekrar gönder</button>
+                    </form>
+                  )}
+                  {m.send_status === "pending" && <p class="msg-warn">Gönderiliyor…</p>}
                 </li>
               ))}
             </ol>
+          </section>
+
+          <section id="yanit">
+            <h2>Yanıt yaz</h2>
+            {replied === "1" && <p class="note" role="status">Gönderildi.</p>}
+            {replied === "0" && <p class="form-error" role="alert">Mesaj kaydedildi ama gönderilemedi. Yukarıdan tekrar gönderebilirsin.</p>}
+            <form class="form-stack" method="post" action={`/admin/konusma/${conv.id}/yanit`}>
+              <label for="metin">Mesaj <span class="opt">({conv.email} adresine, imza: {me.author === "gizem" ? "Gizem" : "Baran"})</span></label>
+              <textarea id="metin" name="metin" rows={8} required maxlength={REPLY_MAX}></textarea>
+              <button class="btn" type="submit">Gönder</button>
+            </form>
           </section>
         </AdminLayout>
       ),
@@ -174,4 +218,80 @@ admin.post("/konusma/:id{[0-9]+}/durum", async (c) => {
   const res = await c.env.DB.prepare("UPDATE conversations SET state = ?1 WHERE id = ?2").bind(next, id).run();
   if (!res.meta.changes) return c.text("Konuşma bulunamadı.", 404);
   return c.redirect(`/admin/konusma/${id}?kaydedildi=1`, 303);
+});
+
+admin.post("/konusma/:id{[0-9]+}/yanit", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await c.req.parseBody();
+  const text = (typeof body.metin === "string" ? body.metin : "").replace(/\r\n/g, "\n").trim();
+  if (!text) return c.text("Mesaj boş.", 400);
+  if (text.length > REPLY_MAX) return c.text("Mesaj çok uzun.", 400);
+  const exists = await c.env.DB.prepare("SELECT 1 FROM conversations WHERE id = ?1").bind(id).first();
+  if (!exists) return c.text("Konuşma bulunamadı.", 404);
+  const { sent } = await sendOutgoing(c.env, id, c.get("admin").author, text, { via: "admin", nextState: "theirs" });
+  return c.redirect(`/admin/konusma/${id}?gonderildi=${sent ? 1 : 0}#yanit`, 303);
+});
+
+admin.post("/mesaj/:id{[0-9]+}/tekrar", async (c) => {
+  const id = Number(c.req.param("id"));
+  const row = await c.env.DB.prepare("SELECT conversation_id FROM messages WHERE id = ?1 AND direction = 'out' AND send_status = 'failed'")
+    .bind(id).first<{ conversation_id: number }>();
+  if (!row) return c.text("Mesaj bulunamadı.", 404);
+  const sent = await deliverMessage(c.env, id);
+  return c.redirect(`/admin/konusma/${row.conversation_id}?gonderildi=${sent ? 1 : 0}#yanit`, 303);
+});
+
+admin.get("/ek/:id{[0-9]+}", async (c) => {
+  const row = await c.env.DB.prepare("SELECT r2_key, filename, content_type FROM attachments WHERE id = ?1")
+    .bind(Number(c.req.param("id"))).first<{ r2_key: string; filename: string; content_type: string }>();
+  if (!row) return c.text("Dosya bulunamadı.", 404);
+  return serveAttachment(c.env, row);
+});
+
+type Unmatched = { id: number; from_addr: string | null; to_addr: string | null; subject: string | null; body_text: string | null; created_at: string };
+
+admin.get("/eslesmeyen", async (c) => {
+  const [tz, rows] = await Promise.all([
+    getHostTz(c.env.DB),
+    c.env.DB.prepare("SELECT id, from_addr, to_addr, subject, body_text, created_at FROM unmatched_emails ORDER BY id DESC LIMIT 200").all<Unmatched>(),
+  ]);
+  const me = c.get("admin");
+  return c.html(
+    "<!doctype html>" +
+      (
+        <AdminLayout title="Eşleşmeyen e-postalar" current="/admin/eslesmeyen" adminName={me.author === "gizem" ? "Gizem" : "Baran"}>
+          <header>
+            <p class="eyebrow">Yönetim</p>
+            <h1>Eşleşmeyen e-postalar</h1>
+            <p class="lede">Hiçbir konuşmaya bağlanamayan gelen e-postalar. Gerekirse göndereni kendi adresinden yanıtla.</p>
+          </header>
+          <section>
+            {rows.results.length === 0 ? (
+              <p class="small">Eşleşmeyen e-posta yok.</p>
+            ) : (
+              <ol class="thread">
+                {rows.results.map((r) => (
+                  <li class="msg msg-in">
+                    <p class="msg-head">
+                      <span>{r.from_addr ?? "—"}</span>
+                      <time datetime={r.created_at}>{formatTr(r.created_at, tz)}</time>
+                    </p>
+                    <p class="msg-warn">Kime: {r.to_addr ?? "—"} · Konu: {r.subject ?? "—"}</p>
+                    <p class="msg-body">{r.body_text ?? ""}</p>
+                    <form class="msg-retry" method="post" action={`/admin/eslesmeyen/${r.id}/sil`}>
+                      <button class="btn-ghost btn-small" type="submit">Sil</button>
+                    </form>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </AdminLayout>
+      ),
+  );
+});
+
+admin.post("/eslesmeyen/:id{[0-9]+}/sil", async (c) => {
+  await c.env.DB.prepare("DELETE FROM unmatched_emails WHERE id = ?1").bind(Number(c.req.param("id"))).run();
+  return c.redirect("/admin/eslesmeyen", 303);
 });

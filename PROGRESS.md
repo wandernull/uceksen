@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-11-07
 **Active phase:** Phase 3 — Email
-**Status:** ⏸ not started — blocked on user: Phase 3 preparation (domain, DNS permission, Resend key)
+**Status:** ⏸ code done and deployed — waiting for the user's real-mailbox test
 
 ---
 
@@ -16,7 +16,7 @@
 | 0 | Skeleton | ✅ | `8b74e18` |
 | 1 | Static pages | ✅ | `bbdf3c0` |
 | 2 | Form and admin | ✅ | `7aadf1b`, `94b5749` (Access) |
-| 3 | Email | ⏸ | — |
+| 3 | Email | 🔄 | — |
 | 4 | Guide sales | ⬜ | — |
 | 5 | Booking (without Google) | ⬜ | — |
 | 6 | Google Calendar | ⬜ | — |
@@ -30,17 +30,16 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Phase 2 done; admin login verified by the user on 2026-11-07. Phase 3 waits for its preparation items (below).
+Phase 3 code is done, deployed and verified live by the agent (form → acknowledgement sent; simulated reply through the real `reply.` MX + webhook matched by In-Reply-To, quote stripped, state → ours). Remaining: the user's real-mailbox test (SPEC §9 Phase 3 test), then mark Phase 3 done.
 
 ## Blocked on user
 
-**Phase 3 preparation (SPEC §10 items 4–6):**
-1. **Domain** in Cloudflare, zone active. As of 2026-11-07 the API token sees only `gizem.me` and `yildizna.me` — no `uceksen.com`.
-2. **DNS permission** on `CLOUDFLARE_API_TOKEN` covering that zone (Zone → DNS → Edit, plus Zone → Zone → Read).
-3. **Resend account** + API key, added to `~/.gizem-creds` as `RESEND_API_KEY` (agent puts it into `.dev.vars` and `wrangler secret put`). Not present yet.
-4. Then: MX approval (SPEC §11 step 3) — decide root MX vs. reply subdomain.
+**Real-mailbox test** (inbox: DEV_EMAIL `bbartu.demirci@gmail.com`):
+1. Find "[TEST] Durum Analizi talebi — Üç Eksen" (live test conversation "Canlı Test") — reply to it from Gmail with a short text.
+2. Within a minute the reply should appear in `/admin` → that conversation, without the quoted part; an "[Üç Eksen] Yeni yanıt (e-posta)" notification arrives too.
+3. Reply from `/admin`; the email should arrive in the same Gmail thread.
 
-How Access was set up (dashboard as of 2026-11, for reference): Zero Trust → Access controls → Applications → Self-hosted and private → *Workers* → **don't** pick a Worker type (both "production and preview URLs" and "preview URLs" protect the whole Worker; neither takes a path) → instead Destinations → **+ Add public hostname**: subdomain `uceksen`, domain `gizemderinkok.workers.dev`, path `admin`. Policy `Admins` (Allow, Include → Emails: the two admin addresses). Authentication: One-time PIN (had to be added first under login methods; only "Cloudflare" was listed), instant authentication on. App name in dashboard: `uceksen`.
+**Reference — how Access was set up** (dashboard as of 2026-11, for reference): Zero Trust → Access controls → Applications → Self-hosted and private → *Workers* → **don't** pick a Worker type (both "production and preview URLs" and "preview URLs" protect the whole Worker; neither takes a path) → instead Destinations → **+ Add public hostname**: subdomain `uceksen`, domain `gizemderinkok.workers.dev`, path `admin`. Policy `Admins` (Allow, Include → Emails: the two admin addresses). Authentication: One-time PIN (had to be added first under login methods; only "Cloudflare" was listed), instant authentication on. App name in dashboard: `uceksen`.
 
 ## Preparation status (SPEC §10), as of 2026-11-07
 
@@ -49,9 +48,9 @@ How Access was set up (dashboard as of 2026-11, for reference): Zero Trust → A
 | 1 | Cloudflare token (Workers, D1, R2) | ✅ `CLOUDFLARE_API_TOKEN` in `~/.gizem-creds`, verified |
 | 2 | Prototype files | ✅ `design/` |
 | 3 | Admin emails | ✅ `gizemderinkok@gmail.com`, `bbartu.demirci@gmail.com` |
-| 4 | Domain on Cloudflare | ⬜ ask before Phase 3 |
-| 5 | DNS permission on token | ❓ user believes it exists — verify before Phase 3 |
-| 6 | Resend account + key | ⬜ ask before Phase 3 |
+| 4 | Domain on Cloudflare | ✅ `uceksen.com`, zone `a4190a0f842469760211c91a23d5a744`, active |
+| 5 | DNS permission on token | ✅ Zone → DNS → Edit added 2026-11-07, read + write verified |
+| 6 | Resend account + key | ✅ account `baran@uceksen.com`; full-access key in `~/.gizem-creds` as `RESEND_API_KEY_UCEKSEN` → `RESEND_API_KEY` in `.dev.vars` + Worker secret |
 | 7 | Company details | ✅ Back of the Envelope B.V., Keizersgracht 520H, 1017EK Amsterdam, Netherlands · KvK 97838810 · BTW NL868254010B01 · court city still unknown |
 | 8 | `DEV_EMAIL` | ✅ `bbartu.demirci@gmail.com` |
 | 9 | Stripe account (isolated, KYC) | ⬜ ask before Phase 4 |
@@ -89,6 +88,26 @@ How Access was set up (dashboard as of 2026-11, for reference): Zero Trust → A
 - Tests: 40 Worker tests (26 new: form storage, honeypot, upsert, 5 validation cases, rate limit, no-JS post, JWT accept/reject × 7, deployed /admin 403/200 cases, list/detail/filter/state change, CSRF, XSS escaping, 404). Mutation-checked: disabling the honeypot or the `aud` check makes tests fail. Browser check now 64 checks incl. form → admin end-to-end and admin pages at 320/375/1280 light/dark.
 - Tests: 14 Worker tests (every page 200, `lang="tr"`, viewport, title, no Google Fonts, no `.html` links, no `[placeholder]`, identical nav, legal details, redirect, assets, buy placeholder). Browser layout check `npm run test:layout`: 6 pages × 320/375/414/1280px × light/dark + modal at 320px = 49 renders — no horizontal scroll, gutter ≥ 16px, correct theme background, fonts loaded with Turkish glyphs, keyboard focus visible, zero external requests. Screenshots reviewed manually.
 
+**Phase 3 — Email infrastructure (2026-11-07)**
+- Root `uceksen.com` mail: **Cloudflare Email Routing** (user's choice). MX `route1/2/3.mx.cloudflare.net`, SPF `include:_spf.mx.cloudflare.net`, DKIM `cf2024-1._domainkey`. Rules: `baran@` and `merhaba@` → `baran@botelabs.io`. Namecheap forwarding MX/SPF and parking `A`/`www CNAME` deleted by the user.
+- Resend (EU region `eu-west-1`), two domains on the free plan (limit 3):
+  - `uceksen.com` (id `4c608941-c10e-4616-9bbd-908c9f89b049`) — sending only. Records: `resend._domainkey` TXT, `send` MX + TXT SPF, `rsend` CNAME (DNS only).
+  - `reply.uceksen.com` (id `f740f79f-ba2c-4b95-8d8e-d819b001f3df`) — receiving only. Records: `resend._domainkey.reply` TXT, `reply` MX 10 → `receive-euw1.forge.rmta.net`.
+  - Both verified.
+- `_dmarc.uceksen.com` TXT `v=DMARC1; p=none;` (monitoring only).
+- Site is still on workers.dev; `uceksen.com` has no A/CNAME until go-live.
+
+**Phase 3 — Email code (2026-11-08)**
+- `src/lib/mail.ts`: Resend client; **DEV_EMAIL guard inside `sendMail`** (every recipient → DEV_EMAIL unless `ENVIRONMENT === "production"`, intended recipients written at the top of the body, subject prefixed `[TEST]`; no DEV_EMAIL ⇒ nothing is sent).
+- Outgoing: message row written first (`send_status` pending → sent/failed), then sent. Subject `<conversation subject> — Üç Eksen`, `Re: …` after the first message. `Reply-To: merhaba+<plus_token>@reply.uceksen.com`, `In-Reply-To`/`References` from the conversation's stored Message-IDs, footer link to `/konusma/<reply_token>`. Admin replies are signed with the admin's name.
+- Contact form now sends the acknowledgement (quotes the form text) + one admin notification. Email failures never fail the form; a failed message shows "Gönderilemedi" + "Tekrar gönder" in `/admin`.
+- `POST /api/webhooks/resend`: Svix signature check (5 min tolerance) → fetch full email from Resend → dedupe by Message-ID → match by In-Reply-To/References (resolving not-yet-known sent Message-IDs on the way), else by plus token → strip quotes (Gmail/Apple/Outlook, EN+TR; raw body kept in `messages.body_raw`) → store, state `ours`, attachments to R2, notify admins. Unmatched → `unmatched_emails` + notification; listed at `/admin/eslesmeyen`.
+- `/konusma/<reply_token>`: thread + reply form with attachments (≤5 files, ≤10 MB each, document/image types), honeypot, CSRF origin check, 10 replies/hour/IP, `no-store`, `noindex`, `Referrer-Policy: no-referrer`. Downloads only via the same token, always `Content-Disposition: attachment`.
+- `/admin`: reply box, send status + resend, attachments, sender shown when it differs from the contact, customer page link, "Eşleşmeyen" page.
+- Migration `0003`: message send/receive columns, `attachments` table, dedupe indexes.
+- Resend webhook `2f6b919a-ea32-48e2-8961-5c6015b4cc09` → `https://uceksen.gizemderinkok.workers.dev/api/webhooks/resend` (`email.received`). Worker secrets: `ADMIN_EMAILS`, `DEV_EMAIL`, `RESEND_API_KEY`, `RESEND_INBOUND_SECRET`. **The webhook URL must be changed to the real domain at go-live.**
+- Tests: 99 Worker tests (DEV_EMAIL guard for every environment value, signature accept/reject incl. replay, 13 quote-stripping cases, HTML fallback, matching by header/token/late Message-ID, unmatched, dedupe, attachments, thread headers on admin replies, `/konusma` privacy headers/uploads/CSRF/honeypot/rate limit, admin reply/resend). Tests use a fake Resend and have network access disabled. Mutation-checked: disabling the guard, the signature check or quote stripping fails 11 / 4 / 13 tests. Browser check: 72 checks incl. admin reply (real send to DEV_EMAIL) and customer reply with a file.
+
 ## Decisions made
 
 > Anything that deviates from `SPEC.md`, or that the spec did not cover, goes here with the reasoning.
@@ -116,11 +135,19 @@ How Access was set up (dashboard as of 2026-11, for reference): Zero Trust → A
 - **2026-11-07 — Single Google calendar:** the "Üç Eksen" calendar in `gizemderinkok@gmail.com`. OAuth is done with that account; freebusy queries that account's calendars only (SPEC §5.5 mentions gizem + baran; reduced to gizem).
 - **2026-11-07 — Guide price is €15 permanently.** SPEC §1 "€29 from December" dropped. One Stripe price.
 - **2026-11-07 — Mailbox must stay possible later.** Planned for Phase 3: inbound threading (Reply-To `merhaba+{token}@…`) goes to a dedicated subdomain (e.g. `reply.uceksen.com`) with its own MX to Resend, so the root domain's MX can later be moved to a real mailbox provider without breaking conversation threading. Confirm with user at start of Phase 3.
+- **2026-11-07 — Replies go to `merhaba+{plus_token}@reply.uceksen.com`** (SPEC §5.2 said `merhaba+…@uceksen.com`). The root MX belongs to Cloudflare Email Routing, so Resend receives on a dedicated subdomain. A future mailbox on the root never breaks threading. Direct mail to `merhaba@uceksen.com` is forwarded by Email Routing, not ingested.
+- **2026-11-07 — Resend in the EU region** (GDPR; customer data stays in the EU).
+- **2026-11-08 — Plain-text emails only.** Simple, threads and quotes cleanly everywhere; matches the plain tone. HTML can be added later.
+- **2026-11-08 — Plus token is lower-case base32 (32 chars, 160 bits)** instead of base64url: mail systems may change an address's case. `reply_token` (URL) stays base64url.
+- **2026-11-08 — Message-ID is SES's, not ours.** Resend ignores a custom `Message-ID`; the real one is fetched from Resend after sending (and lazily before threading/matching).
+- **2026-11-08 — One notification email to all admins** (not one per admin), so outside production it is a single test email.
+- **2026-11-08 — Email attachments are stored in R2 too** (SPEC only required them on the web path); >10 MB ones are skipped (still in Resend).
 
 ## Known issues
 
 - `GH_TOKEN` lacks the `read:org` scope; `gh auth status` warns. Harmless for this repo.
-- Until Phase 3 the form's success text says a confirmation email was sent, but no email is sent yet.
+- Admin replies can't carry attachments yet (customers can attach on `/konusma`).
+- At go-live: change the Resend webhook endpoint and `APP_URL` to the real domain (links in already-sent test emails point at workers.dev).
 - `/satis-kosullari` says an expired download link can be renewed "siteden" and links to `/`; point it at `/indir` in Phase 4.
 - `/gizlilik` promises an unsubscribe link at the bottom of guide-update emails — must be implemented in Phase 4.
 - `test:layout` runs locally only (needs Chrome + running dev server); not in CI.

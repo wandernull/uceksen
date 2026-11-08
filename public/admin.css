@@ -84,21 +84,6 @@
 .btn-small { font-size: .9rem; padding: .55rem 1rem; }
 .saved { font-family: var(--mono); font-size: .76rem; color: var(--accent); }
 
-.thread { list-style: none; padding: 0; gap: 1rem; }
-.msg { padding: 1rem 1.1rem; border-left: 3px solid var(--rule); display: flex; flex-direction: column; gap: .5rem; }
-.msg-out { border-left-color: var(--accent); background: var(--panel); }
-.msg-head {
-  display: flex;
-  justify-content: space-between;
-  gap: .75rem;
-  flex-wrap: wrap;
-  font-family: var(--mono);
-  font-size: .74rem;
-  color: var(--muted);
-}
-.msg-head span { color: var(--ink); }
-.msg-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .97rem; }
-
 @media (max-width: 560px) {
   .facts { grid-template-columns: 1fr; gap: 0; }
   .facts dd { margin-bottom: .55rem; }

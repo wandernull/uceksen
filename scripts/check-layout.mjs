@@ -104,6 +104,27 @@ let adminPages = [];
       await page.click(".state-form button");
       await page.waitForURL(/kaydedildi=1/);
       if ((await page.inputValue("#durum")) !== "ours") fail("/admin detail: state change not saved");
+
+      // Admin reply → real Resend send (the dev guard redirects it to DEV_EMAIL).
+      const customerHref = await page.locator('.facts a[href*="/konusma/"]').getAttribute("href");
+      await page.fill("#metin", "Tarayıcıdan gönderilen admin yanıtı.");
+      await page.click("#yanit button[type=submit]");
+      await page.waitForURL(/gonderildi=/);
+      checks++;
+      if (!page.url().includes("gonderildi=1")) fail("/admin reply: not sent (check RESEND_API_KEY / DEV_EMAIL in .dev.vars)");
+
+      // Customer page: reply with a file.
+      const customerPath = new URL(customerHref).pathname;
+      await page.goto(BASE + customerPath);
+      await page.fill("#k-metin", "Müşteri sayfasından yanıt.");
+      await page.setInputFiles("#k-dosya", { name: "gelir-tablosu.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
+      await page.click("#yanit button[type=submit]");
+      await page.waitForURL(/gonderildi=1/).catch(() => {});
+      checks++;
+      if (!(await page.isVisible(".note"))) fail("/konusma reply: success note not shown");
+      if ((await page.locator('a:has-text("gelir-tablosu.pdf")').count()) !== 1) fail("/konusma reply: attachment not listed");
+      await page.keyboard.press("Tab");
+      adminPages.push(customerPath);
     }
   }
   await ctx.close();
@@ -123,7 +144,7 @@ for (const [theme, expected] of Object.entries(THEMES)) {
       if (m.scrollW > m.clientW) fail(`${where}: horizontal scroll (${m.scrollW} > ${m.clientW})`);
       if (m.bg !== expected.paper) fail(`${where}: body background ${m.bg}`);
       if (SHOTS && width !== 1280) {
-        const name = path === "/admin/" ? "admin-list" : "admin-detail";
+        const name = path === "/admin/" ? "admin-list" : path.startsWith("/konusma/") ? "konusma" : "admin-detail";
         await page.screenshot({ path: `${SHOTS}/${name}-${width}-${theme}.png`, fullPage: true });
       }
     }
@@ -145,7 +166,7 @@ for (const [theme, expected] of Object.entries(THEMES)) {
 }
 
 await browser.close();
-console.log(`${checks} checks (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes, form → admin flow, admin pages × 3 widths × 2 themes, modal)`);
+console.log(`${checks} checks (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes, form → admin → reply → customer page flow, admin + /konusma pages × 3 widths × 2 themes, modal)`);
 if (failures.length) {
   console.error(`FAILED (${failures.length}):\n` + failures.map((f) => "  - " + f).join("\n"));
   process.exit(1);

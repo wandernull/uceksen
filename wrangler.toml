@@ -23,7 +23,14 @@ APP_URL = "https://uceksen.gizemderinkok.workers.dev"
 # the deployed Worker. Filled in once the Access application exists.
 ACCESS_TEAM_DOMAIN = "twilight-surf-1e57.cloudflareaccess.com"
 ACCESS_AUD = "3cd68cb34b43442be78fbe69bbd46d5292f1e697a9a0cd94879bf00636db5d0b"
-# ADMIN_EMAILS is a secret (wrangler secret put): "gizem=a@x.com,baran=b@y.com"
+# Email (Resend). Replies come back to REPLY_LOCAL+<plus_token>@REPLY_DOMAIN, a
+# receiving-only Resend domain; the root domain's MX belongs to Cloudflare Email Routing.
+MAIL_FROM = "Üç Eksen <merhaba@uceksen.com>"
+MAIL_DOMAIN = "uceksen.com"
+REPLY_LOCAL = "merhaba"
+REPLY_DOMAIN = "reply.uceksen.com"
+# Secrets (wrangler secret put): ADMIN_EMAILS ("gizem=a@x.com,baran=b@y.com"),
+# DEV_EMAIL, RESEND_API_KEY, RESEND_INBOUND_SECRET
 
 [[d1_databases]]
 binding = "DB"
