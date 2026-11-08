@@ -16,7 +16,15 @@ export type OutMail = {
   references?: string[];
   /** Resend deduplicates sends with the same key (24h). */
   idempotencyKey?: string;
+  attachments?: { filename: string; content: string; contentType: string }[];
 };
+
+/** UTF-8 text → base64, for attachment content. */
+export function textToBase64(text: string): string {
+  let bin = "";
+  for (const b of new TextEncoder().encode(text)) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
 
 export class MailGuardError extends Error {}
 
@@ -65,6 +73,9 @@ export async function sendMail(
       text: m.text,
       ...(m.replyTo ? { reply_to: m.replyTo } : {}),
       ...(Object.keys(headers).length ? { headers } : {}),
+      ...(m.attachments?.length
+        ? { attachments: m.attachments.map((a) => ({ filename: a.filename, content: a.content, content_type: a.contentType })) }
+        : {}),
     }),
   });
 }

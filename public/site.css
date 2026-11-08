@@ -66,7 +66,12 @@ button.btn:disabled { opacity: .6; cursor: progress; }
 }
 .form-stack label .opt { text-transform: none; letter-spacing: 0; }
 .form-stack textarea,
-.form-stack input[type="text"] {
+.form-stack select,
+.form-stack input[type="text"],
+.form-stack input[type="email"],
+.form-stack input[type="number"],
+.form-stack input[type="date"],
+.form-stack input[type="time"] {
   font-family: var(--body);
   font-size: 1rem;
   color: var(--ink);
@@ -80,6 +85,7 @@ button.btn:disabled { opacity: .6; cursor: progress; }
 .form-stack textarea { resize: vertical; line-height: 1.5; }
 .form-stack input[type="file"] { font-family: var(--body); font-size: .92rem; color: var(--ink); max-width: 100%; }
 .form-stack textarea:focus-visible,
+.form-stack select:focus-visible,
 .form-stack input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -89,3 +95,43 @@ button.btn:disabled { opacity: .6; cursor: progress; }
 
 button.btn { border: 0; cursor: pointer; }
 button.btn-ghost { background: transparent; cursor: pointer; }
+
+/* Booking: time zone switch and slot picker */
+.tz-form { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; margin-bottom: 1.5rem; }
+.tz-form label { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.tz-form select { max-width: 100%; min-width: 0; flex: 1 1 14rem; font: inherit; padding: .45rem .6rem; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); }
+.slot-form { display: grid; gap: 1.25rem; }
+.slot-day { border: 0; padding: 0; margin: 0; min-width: 0; }
+.slot-day legend { font-family: var(--display); font-weight: 600; padding: 0; margin-bottom: .5rem; }
+.slot-options { display: flex; flex-wrap: wrap; gap: .5rem; }
+.slot { position: relative; }
+.slot input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.slot span {
+  display: inline-block; font-family: var(--mono); font-size: .9rem; padding: .5rem .9rem;
+  border: 1px solid var(--rule); color: var(--ink); background: var(--paper);
+}
+.slot input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.slot input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.form-stack .check { display: flex; align-items: flex-start; gap: .55rem; text-transform: none; letter-spacing: 0; font-family: var(--body); font-size: .95rem; color: var(--ink); }
+.form-stack .check input { margin-top: .25rem; accent-color: var(--accent); }
+
+/* Shared by customer and admin pages */
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: .35rem 1.2rem;
+  margin: 0;
+  font-size: .95rem;
+}
+.facts dt { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-top: .2rem; }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.btn-small { font-size: .9rem; padding: .55rem 1rem; }
+@media (max-width: 560px) {
+  .facts { grid-template-columns: 1fr; gap: 0; }
+  .facts dd { margin-bottom: .55rem; }
+}
+.slot-week { border-top: 1px solid var(--rule); padding-top: .75rem; }
+.slot-week > summary { cursor: pointer; font-family: var(--mono); font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: .25rem 0; }
+.slot-week[open] > summary { color: var(--ink); margin-bottom: .75rem; }
+.slot-week > .slot-day + .slot-day { margin-top: 1rem; }

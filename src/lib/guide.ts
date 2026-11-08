@@ -6,7 +6,7 @@ import { randomMailToken, randomToken } from "./tokens";
 
 type GuideEnv = Pick<
   Env,
-  | "DB" | "ENVIRONMENT" | "DEV_EMAIL" | "RESEND_API_KEY" | "MAIL_FROM" | "REPLY_LOCAL" | "REPLY_DOMAIN" | "APP_URL"
+  | "DB" | "ENVIRONMENT" | "DEV_EMAIL" | "RESEND_API_KEY" | "MAIL_FROM" | "MAIL_DOMAIN" | "REPLY_LOCAL" | "REPLY_DOMAIN" | "APP_URL"
   | "ADMIN_EMAILS" | "STRIPE_SECRET_KEY"
 >;
 

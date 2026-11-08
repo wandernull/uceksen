@@ -164,6 +164,53 @@ let adminPages = [];
           adminPages.push(dPath);
         }
       }
+
+      // Consulting: open hours in /admin/takvim, send the payment link, simulate the paid
+      // webhook, pick a slot as the customer, then open the change page.
+      await page.goto(BASE + "/admin/takvim");
+      for (const day of ["0", "1", "2", "3", "4", "5", "6"]) {
+        await page.selectOption("#k-gun", day);
+        await page.fill("#k-bas", "09:00");
+        await page.fill("#k-bit", "18:00");
+        await page.click('form[action="/admin/takvim/kural"] button');
+        await page.waitForURL(/kaydedildi=kural/);
+      }
+      adminPages.push("/admin/takvim");
+      await page.goto(BASE + href);
+      await page.click('form[action$="/odeme"] button');
+      await page.waitForURL(/odeme=1/).catch(() => {});
+      checks++;
+      if (!page.url().includes("odeme=1")) fail("/admin: payment link not sent");
+      const convId = href.split("/").pop();
+      const cbody = JSON.stringify({ type: "checkout.session.completed", data: { object: {
+        id: `cs_layout_c_${stamp2}`, mode: "payment", payment_status: "paid", amount_total: 20000, currency: "eur",
+        payment_intent: `pi_layout_${stamp2}`, invoice: null, metadata: { project: "uceksen", kind: "consult", conversation_id: convId },
+        consent: { terms_of_service: "accepted" }, customer_details: { email: `layout-${stamp}@example.com`, name: null, address: { country: "NL" } } } } });
+      const ct = Math.floor(Date.now() / 1000);
+      const csig = createHmac("sha256", secret ?? "").update(`${ct}.${cbody}`).digest("hex");
+      const cw = await fetch(BASE + "/api/webhooks/stripe", { method: "POST", body: cbody, headers: { "stripe-signature": `t=${ct},v1=${csig}` } });
+      checks++;
+      if (cw.status !== 200) fail(`consult webhook: HTTP ${cw.status}`);
+      await page.goto(BASE + href);
+      const rHref = await page.locator('#danismanlik a[href*="/randevu/"]').first().getAttribute("href").catch(() => null);
+      if (!rHref) fail("/admin: booking link not shown after payment");
+      else {
+        const rPath = new URL(rHref).pathname;
+        await page.goto(BASE + rPath);
+        await page.waitForURL(/tz=/).catch(() => {}); // randevu.js switches to the browser's zone
+        checks++;
+        if (!page.url().includes("tz=")) fail("/randevu: browser time zone not applied");
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/randevu-sec-${page.viewportSize().width}.png`, fullPage: true });
+        const pick = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+        checks++;
+        if (!pick) fail("/randevu picker: horizontal scroll");
+        await page.locator(".slot").nth(2).click();
+        await page.click(".slot-form button[type=submit]");
+        await page.waitForURL(/ayarlandi=1/).catch(() => {});
+        checks++;
+        if (!page.url().includes("ayarlandi=1")) fail("/randevu: booking failed");
+        adminPages.push(rPath, rPath + "/degistir");
+      }
     }
   }
   await ctx.close();
@@ -183,7 +230,9 @@ for (const [theme, expected] of Object.entries(THEMES)) {
       if (m.scrollW > m.clientW) fail(`${where}: horizontal scroll (${m.scrollW} > ${m.clientW})`);
       if (m.bg !== expected.paper) fail(`${where}: body background ${m.bg}`);
       if (SHOTS && width !== 1280) {
-        const name = path === "/admin/" ? "admin-list" : path === "/admin/rehber" ? "admin-rehber" : path.startsWith("/d/") ? "indir-token" : path.startsWith("/konusma/") ? "konusma" : "admin-detail";
+        const name = path === "/admin/" ? "admin-list" : path === "/admin/rehber" ? "admin-rehber" : path === "/admin/takvim" ? "admin-takvim"
+          : path.startsWith("/d/") ? "indir-token" : path.startsWith("/konusma/") ? "konusma"
+          : path.endsWith("/degistir") ? "randevu-degistir" : path.startsWith("/randevu/") ? "randevu" : "admin-detail";
         await page.screenshot({ path: `${SHOTS}/${name}-${width}-${theme}.png`, fullPage: true });
       }
     }
@@ -205,7 +254,7 @@ for (const [theme, expected] of Object.entries(THEMES)) {
 }
 
 await browser.close();
-console.log(`${checks} checks (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes, form → admin → reply → customer page → guide upload/purchase/download flow, admin + /konusma pages × 3 widths × 2 themes, modal)`);
+console.log(`${checks} checks (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes, form → admin → reply → customer page → guide upload/purchase/download flow → availability, payment, booking, admin + /konusma pages × 3 widths × 2 themes, modal)`);
 if (failures.length) {
   console.error(`FAILED (${failures.length}):\n` + failures.map((f) => "  - " + f).join("\n"));
   process.exit(1);

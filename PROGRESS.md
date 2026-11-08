@@ -4,8 +4,8 @@
 > When the user returns after a break, this file tells them where things stand.
 
 **Last updated:** 2026-11-08
-**Active phase:** Phase 4 — Guide sales
-**Status:** ✅ done, approved by user 2026-11-08 — Phase 5 next
+**Active phase:** Phase 5 — Booking, without Google
+**Status:** ✅ done — waiting for user approval; Phase 6 then needs the Google preparation (items 12–13)
 
 ---
 
@@ -18,7 +18,7 @@
 | 2 | Form and admin | ✅ | `7aadf1b`, `94b5749` (Access) |
 | 3 | Email | ✅ | `99a3b9d` |
 | 4 | Guide sales | ✅ | `3ecf790`, `a6c96d5`, `b6f0e4b` (₺ font) |
-| 5 | Booking (without Google) | ⬜ | — |
+| 5 | Booking (without Google) | ✅ | see `git log --grep 'phase 5'` |
 | 6 | Google Calendar | ⬜ | — |
 | 7 | Intake, reminders, summary | ⬜ | — |
 | 8 | Cleanup and resilience | ⬜ | — |
@@ -30,13 +30,16 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Phase 4 done and approved (user tested the full flow incl. TR/lira checkout, 2026-11-08). Next: Phase 5 (booking without Google) — no user preparation needed.
+Phase 5 done (2026-11-08), waiting for approval. Next: Phase 6 (Google Calendar) — needs preparation items 12–13 first.
 
 ## Blocked on user
 
-Nothing blocking.
+**Phase 5 approval**, then **before Phase 6 (SPEC §10 items 12–13):**
+1. GCP project with the Google Calendar API enabled; OAuth consent screen **In production** (otherwise refresh tokens expire after 7 days); OAuth client (Web application) with redirect URIs `https://uceksen.gizemderinkok.workers.dev/admin/google/callback` and `http://localhost:8787/admin/google/callback`. Put client ID + secret in `~/.gizem-creds` (e.g. `GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`).
+2. A separate calendar named **"Üç Eksen"** in `gizemderinkok@gmail.com`.
 
 Not blocking, for later:
+- Set real working hours at `/admin/takvim` (staging has none, so the booking page shows "boş saat yok").
 - Upload the real guide PDF at `/admin/rehber` (version e.g. `1.0`, "güncel yap" on). The deployed site currently sells placeholder version `0.1`.
 - Accountant: 9% vs 21% NL VAT for the guide (currently tax code `txcd_10302000`, e-book, 9%).
 
@@ -127,6 +130,19 @@ Not blocking, for later:
 - **Live sandbox test (2026-11-08):** `/rehber` → "Satın al" → branded Turkish Checkout (tax €1.24 = 9% for NL shown) → test card 4242 → `/rehber/tesekkurler`; webhook delivered and verified; purchase row (NL, terms accepted, invoice URL), delivery email sent to DEV_EMAIL; `/d/{token}` page showed 5 left, POST returned the identical PDF, page then showed 4.
 - Tests: 125 Worker tests (26 new: signature accept/reject/replay, Checkout params, closed-without-PDF, Stripe down, unsigned/foreign/unpaid events, fulfilment + email, idempotency, failed email, repeat buyer + reply threading, GET doesn't count, 5 downloads then 6th rejected, parallel last download, expired, unknown, new version served, `/indir` send/unknown/IP limit/address cap/honeypot, upload validation, update notices once + opt-out, admin page). Mutation-checked: disabling the Stripe signature check or the download limit fails 2 tests each. Browser check: 103 checks incl. admin upload → signed webhook → `/d/` download, new pages at 320–1280px light/dark (fixed: admin nav overflowed 6px at 320px with the new item — now wraps).
 
+**Phase 5 — Booking, without Google (2026-11-08)**
+- Flow (as decided 2026-11-07): contact form → conversation → admin clicks **"Ödeme bağlantısını gönder"** in `/admin/konusma/{id}` (standard signed email with `/konusma/{reply_token}/odeme`, state `theirs`, `consult_offered_at` set) → that page (only exists once offered; forwards to the booking page if already paid) → Stripe Checkout €200 (`kind=consult`, `conversation_id` in metadata, email prefilled, terms consent, invoice, Turkish) → webhook **or** the success page `/odeme/tamam?oturum=…` (asks Stripe itself if the webhook is late; both idempotent) → `booking_intents` row (60 days, payment intent, amount in EUR, invoice URL) + email with `/randevu/{token}`, conversation `awaiting_booking`, admins notified.
+- `/randevu/{token}`: slots in the customer's zone (`randevu.js` switches to the browser's zone on first visit; zone selectable; host zone without JS), grouped by week (first week open). Booking = one SQL statement (`INSERT … SELECT … WHERE NOT EXISTS overlapping live booking incl. buffers`) + the unique index as the final lock; on conflict 409 "Bu saat az önce doldu". Then intent `used_at`, conversation `theirs`, confirmation email with `.ics` attachment, admin notification. Booked page shows date/zone/duration, `.ics` download, change link.
+- `/randevu/{token}/degistir`: reschedule while > 24 h ahead and < 2 times (same booking row, `state=rescheduled`, `reschedule_count+1`, own slot excluded from conflicts; email with updated `.ics`); cancel (checkbox) → slot freed first, then Stripe refund (idempotency key per booking) if > 48 h ahead; < 48 h: no refund (`not_eligible`). Failed refund → `refund_status=failed`, conversation back to `ours`, admins get "İADE BAŞARISIZ". Cancellation email carries a `STATUS:CANCELLED` `.ics`.
+- Admin: conversation page has a "Durum Analizi" section (payment, booking in host + customer zone, state, refund, customer link, **"İptal et ve tam iade yap"** — admin cancellations always refund). `/admin/takvim` (new nav item): upcoming bookings, preview of open slots, weekly hours (add/delete, duplicates ignored), exceptions (closed day/range, extra opening), settings (host zone, start times, notice, horizon, buffers, max per week).
+- Slots (`src/lib/slots.ts`, pure, Luxon): rule windows + extra openings in `host_tz`, fixed start times, whole 90 min must fit, minus blocks, minus live bookings and (Phase 6) Google busy time each widened by the buffers (15 before / 30 after), min notice 48 h, horizon 45 days, max 3 per ISO week (host zone). Times that don't exist on a spring-forward day are skipped; the repeated hour in autumn is offered once.
+- `.ics` (`src/lib/ics.ts`): `METHOD:PUBLISH`, `ORGANIZER;CN=Üç Eksen:mailto:merhaba@uceksen.com`, no ATTENDEE, UTC times, UID `booking-{id}@uceksen.com`, SEQUENCE = reschedules (+1 on cancel), 30-min alarm, CRLF, 75-octet folding (UTF-8 safe), RFC escaping. Built when the email is sent, so a resend carries the current state. Meet link goes into LOCATION/DESCRIPTION once Phase 6 fills `meet_url`.
+- Email attachments added to `sendMail` (Resend `attachments`); `messages.booking_id` marks emails that carry the `.ics`.
+- Migration `0005`: `bookings` rebuilt — `start_utc` UNIQUE now a **partial unique index over live bookings** (`confirmed`, `rescheduled`) so a cancellation frees the slot; cancel/refund columns; payment columns on `booking_intents`; `conversations.consult_offered_at`; `messages.booking_id`.
+- Shared CSS: `.facts`, `.btn-small` moved from `admin.css` to `site.css` (customer pages use them); selects/date/time/number inputs styled like text inputs.
+- **Live sandbox test (2026-11-08):** payment page → Checkout (€200, NL VAT €34,71 shown, email prefilled) → test card → success page → `/randevu/…?tz=Europe/Amsterdam` (browser zone) → booked → cancelled > 48 h ahead → Stripe sandbox refund €200 `succeeded`; three emails sent to DEV_EMAIL. Temporary hours removed afterwards.
+- Tests: 158 Worker tests (32 new): slot rules, window fit, horizon, blocks/extras, buffers at the exact boundary, max per week, host_tz change keeps booked instants, **DST spring-forward and fall-back (Europe/Amsterdam 2026)**, display across zones with different DST dates; `.ics` structure/folding/escaping/sequence; payment gating + Checkout params, webhook + success-page fulfilment, idempotency, slot listing per zone, booking + `.ics` email, **three concurrent requests for one slot → exactly one wins**, unavailable/expired, reschedule ×2 limit, old slot freed, cancel > 48 h refund / < 48 h none / < 24 h no reschedule, failed refund, admin cancel, DB lock incl. cancelled rows, `/admin/takvim` validation. Mutation-checked: removing the DST gap check, the busy/booking check, max-per-week, the refund window or the reschedule limits fails 1 / 11 / 1 / 1 / 2 tests. Browser check 126 checks incl. hours → payment link → paid webhook → pick slot → change page.
+
 ## Decisions made
 
 > Anything that deviates from `SPEC.md`, or that the spec did not cover, goes here with the reasoning.
@@ -170,6 +186,14 @@ Not blocking, for later:
 - **2026-11-08 — Adaptive Pricing is on (Stripe default):** TR visitors see and pay in TRY (e.g. ₺871,73 for €15), Stripe converts. Sales are booked in EUR from `currency_conversion`; the delivery email shows what the customer paid. Open question to the user: keep lira for TR buyers or force EUR.
 - **2026-11-08 — Buying is a POST form**, not a link: crawlers following links would otherwise create Checkout sessions.
 - **2026-11-08 — `/indir` is also limited per email address** (3/hour), on top of SPEC's 3/hour/IP, so nobody can flood a purchaser's inbox from many IPs.
+- **2026-11-08 — Booking lock is a partial unique index** (`start_utc` unique among `confirmed`/`rescheduled`), not a plain column UNIQUE: otherwise a cancelled booking would block its slot forever. Bookings are inserted with a single `INSERT … SELECT … WHERE NOT EXISTS` that also enforces the buffers, so no read-then-write gap.
+- **2026-11-08 — Admin opens the payment step per conversation** (`consult_offered_at`); the link `/konusma/{reply_token}/odeme` creates a fresh Checkout session on each click (sessions expire after 24 h; the emailed link does not).
+- **2026-11-08 — Success page fulfils too** (`/odeme/tamam?oturum=…` asks Stripe for the session if the webhook hasn't arrived), so the customer lands on the booking page right after paying. Idempotent per session.
+- **2026-11-08 — Booking via `POST /randevu/{token}`** (SPEC said `POST /api/randevu`): plain form, works without JavaScript; same lock semantics.
+- **2026-11-08 — Rescheduling keeps the booking row** (state `rescheduled`, count +1); the `.ics` keeps its UID and raises SEQUENCE so calendars move the event.
+- **2026-11-08 — Reschedule/cancel rules from `/satis-kosullari`:** reschedule while > 24 h ahead, max 2; cancel any time before the start, refund only > 48 h ahead (customer) or always (admin). The terms' "< 48 h: one free reschedule" is covered by the general reschedule rule.
+- **2026-11-08 — Weekday numbering 0 = Monday … 6 = Sunday** in `availability_rules` (SPEC left it open).
+- **2026-11-08 — A paid consult session without a matching conversation** is acknowledged and reported to admins ("Eşleşmeyen Durum Analizi ödemesi"), not retried.
 - **2026-11-08 — Update notices go out in batches of 25 per click** (Worker subrequest limits), tracked per version and contact so nobody gets one twice.
 
 ## Known issues
@@ -178,6 +202,9 @@ Not blocking, for later:
 - Admin replies can't carry attachments yet (customers can attach on `/konusma`).
 - At go-live: change the Resend webhook endpoint and `APP_URL` to the real domain (links in already-sent test emails point at workers.dev).
 - Update emails carry the opt-out link in the body only (no `List-Unsubscribe` header yet).
+- `max_per_week` is checked when slots are listed, not inside the booking statement: two people booking the last two free places of a week at the same moment could exceed it by one. Same-slot double booking is impossible.
+- Confirmation says the Meet link "will follow" until Phase 6 creates it.
+- Intake form link in the confirmation email comes with Phase 7.
 - **Go-live (Phase 9), Stripe — sandbox settings do not carry over to live:** activate the live account (KYC, bank), public details (incl. terms-of-service URL, support email), branding (icon, logo, colours), Stripe Tax (head office, inclusive default, NL registration), create both products/prices and put the live price ids in `wrangler.toml`, live webhook endpoint for `https://uceksen.com/api/webhooks/stripe` (same two events) → `STRIPE_WEBHOOK_SECRET`, restricted live key → `STRIPE_SECRET_KEY` (user installs both). Decide whether Stripe also emails its own receipt/invoice (our delivery email already links the invoice).
 - `test:layout` runs locally only (needs Chrome + running dev server); not in CI.
 
@@ -187,4 +214,4 @@ Not blocking, for later:
 
 ## Next step
 
-After approval: Phase 5 — booking without Google (availability rules, date overrides, slot computation with DST tests, `/randevu/{token}`, `bookings.start_utc` lock, `.ics`, confirmation emails, reschedule/cancel with Stripe refund). No user preparation needed.
+After approval and items 12–13: Phase 6 — Google Calendar (OAuth from `/admin`, encrypted refresh token, freebusy subtracted from slots, `events.insert` with no attendees + Meet link, event updates on reschedule/cancel). ⏸ user step inside Phase 6: grant consent once from `/admin`.

@@ -127,3 +127,53 @@ export async function verifyStripeSignature(
   const expected = await signStripe(secret, t, body);
   return sigs.some((s) => timingSafeEqual(s, expected));
 }
+
+// --- Consulting -----------------------------------------------------------------------
+
+const CONSULT_TERMS_TEXT = (url: string) =>
+  `[Satış koşullarını](${url}/satis-kosullari), özellikle iptal ve iade koşullarını okudum ve kabul ediyorum.`;
+
+export async function createConsultCheckout(
+  env: Pick<Env, "STRIPE_SECRET_KEY" | "STRIPE_PRICE_CONSULT" | "APP_URL">,
+  p: { conversationId: number; email: string; replyToken: string },
+): Promise<CheckoutSession> {
+  const meta = { project: "uceksen", kind: "consult", conversation_id: String(p.conversationId) };
+  return call<CheckoutSession>(env, "POST", "/checkout/sessions", {
+    mode: "payment",
+    line_items: [{ price: env.STRIPE_PRICE_CONSULT, quantity: 1 }],
+    customer_email: p.email,
+    automatic_tax: { enabled: true },
+    consent_collection: { terms_of_service: "required" },
+    custom_text: { terms_of_service_acceptance: { message: CONSULT_TERMS_TEXT(env.APP_URL) } },
+    invoice_creation: { enabled: true, invoice_data: { footer: INVOICE_FOOTER, metadata: meta } },
+    payment_intent_data: { metadata: meta },
+    metadata: meta,
+    locale: "tr",
+    branding_settings: BRANDING,
+    success_url: `${env.APP_URL}/odeme/tamam?oturum={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${env.APP_URL}/konusma/${p.replyToken}/odeme`,
+  });
+}
+
+export async function retrieveCheckoutSession(env: Pick<Env, "STRIPE_SECRET_KEY">, id: string): Promise<CheckoutSession> {
+  return call(env, "GET", `/checkout/sessions/${encodeURIComponent(id)}`);
+}
+
+/** Full refund of a payment. The idempotency key makes a retried call refund only once. */
+export async function refundPayment(
+  env: Pick<Env, "STRIPE_SECRET_KEY">,
+  paymentIntent: string,
+  idempotencyKey: string,
+): Promise<{ id: string; status: string }> {
+  const res = await stripeApi.fetch(`${API}/refunds`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: formEncode({ payment_intent: paymentIntent, metadata: { project: "uceksen" } }).toString(),
+  });
+  if (!res.ok) throw new Error(`Stripe POST /refunds: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  return (await res.json()) as { id: string; status: string };
+}

@@ -4,6 +4,7 @@ import type { AppEnv } from "../env";
 import { ATTACH, attachmentsFor, extensionAllowed, formatSize, serveAttachment, storeAttachment, type AttachmentRow } from "../lib/attachments";
 import { AUTHOR_NAME, notifyNewMessage, recordIncoming } from "../lib/conversations";
 import { allow, clientIp } from "../lib/rate-limit";
+import { createConsultCheckout } from "../lib/stripe";
 import { getHostTz } from "../lib/settings";
 import { formatTr, nowIso } from "../lib/time";
 import { MessagePage, SiteLayout } from "../views/layout";
@@ -232,4 +233,77 @@ konusma.post(`/:token${TOKEN}/abonelik`, async (c) => {
   await c.env.DB.prepare("UPDATE contacts SET guide_updates_optout_at = ?1 WHERE id = ?2")
     .bind(optOut ? nowIso() : null, ct.id).run();
   return c.redirect(`/konusma/${token}/abonelik`, 303);
+});
+
+// --- Consulting payment, opened by an admin from the conversation ------------------------
+
+export const PAY_RATE = { limit: 20, windowSec: 3600 } as const;
+
+async function payState(db: D1Database, token: string) {
+  const conv = await db.prepare(
+    `SELECT c.id, c.consult_offered_at, ct.email, ct.name FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.reply_token = ?1`,
+  ).bind(token).first<{ id: number; consult_offered_at: string | null; email: string; name: string | null }>();
+  if (!conv?.consult_offered_at) return null;
+  // Already paid and still usable → straight to the booking page (no double payment).
+  const intent = await db.prepare(
+    `SELECT i.token FROM booking_intents i
+      WHERE i.conversation_id = ?1
+        AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.booking_intent_id = i.id AND b.state = 'cancelled')
+        AND (i.used_at IS NOT NULL OR i.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      ORDER BY i.id DESC LIMIT 1`,
+  ).bind(conv.id).first<{ token: string }>();
+  return { conv, paidToken: intent?.token ?? null };
+}
+
+konusma.get(`/:token${TOKEN}/odeme`, async (c) => {
+  const token = c.req.param("token");
+  const st = await payState(c.env.DB, token);
+  if (!st) return c.html(notFound(), 404);
+  if (st.paidToken) return c.redirect(`/randevu/${st.paidToken}`, 303);
+  return c.html(
+    "<!doctype html>" +
+      (
+        <SiteLayout title="Durum Analizi — ödeme — Üç Eksen" noindex>
+          <header>
+            <p class="eyebrow">Durum Analizi</p>
+            <h1>Ödeme ve randevu</h1>
+            <p class="lede">90 dakika görüşme ve birkaç gün içinde yazılı özet. Ödemeden hemen sonra takvimden sana uyan saati seçiyorsun.</p>
+          </header>
+          <section>
+            <div class="boxed">
+              <div class="price-row">
+                <span class="price">€200</span>
+                <span class="price-note">KDV dahil<br />Tek seferlik ödeme</span>
+              </div>
+              <form method="post" action={`/konusma/${token}/odeme`}>
+                <button class="btn" type="submit">Ödemeye geç</button>
+              </form>
+              <p class="small">
+                Görüşmeye 48 saatten fazla varken iptal edersen ücretin tamamı iade edilir. Ayrıntılar <a href="/satis-kosullari">satış koşullarında</a>.
+              </p>
+            </div>
+          </section>
+        </SiteLayout>
+      ),
+  );
+});
+
+konusma.post(`/:token${TOKEN}/odeme`, async (c) => {
+  const token = c.req.param("token");
+  const st = await payState(c.env.DB, token);
+  if (!st) return c.html(notFound(), 404);
+  if (st.paidToken) return c.redirect(`/randevu/${st.paidToken}`, 303);
+  if (!(await allow(c.env.KV, `odeme:${clientIp(c.req.raw)}`, PAY_RATE.limit, PAY_RATE.windowSec))) {
+    return c.html("<!doctype html>" + <MessagePage title="Çok fazla deneme" eyebrow="Durum Analizi" heading="Biraz bekle"
+      text="Kısa sürede çok fazla ödeme sayfası açıldı. Bir saat sonra tekrar dene." back={[`/konusma/${token}/odeme`, "← Geri"]} />, 429);
+  }
+  try {
+    const s = await createConsultCheckout(c.env, { conversationId: st.conv.id, email: st.conv.email, replyToken: token });
+    if (!s.url) throw new Error(`checkout session ${s.id} has no url`);
+    return c.redirect(s.url, 303);
+  } catch (err) {
+    console.error("consult checkout failed", err);
+    return c.html("<!doctype html>" + <MessagePage title="Ödeme sayfası açılamadı" eyebrow="Durum Analizi" heading="Ödeme sayfası açılamadı"
+      text="Bir sorun oldu, ödeme alınmadı. Biraz sonra tekrar dene." back={[`/konusma/${token}/odeme`, "← Geri"]} />, 502);
+  }
 });

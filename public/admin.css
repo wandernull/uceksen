@@ -60,15 +60,7 @@
 .state-ours { border-color: var(--accent); color: var(--accent); }
 .state-awaiting_booking { border-color: var(--ink); color: var(--ink); }
 
-.facts {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: .35rem 1.2rem;
-  margin: 0;
-  font-size: .95rem;
-}
-.facts dt { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-top: .2rem; }
-.facts dd { margin: 0; overflow-wrap: anywhere; }
+
 
 .state-form { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .8rem; }
 .state-form label { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
@@ -82,19 +74,15 @@
   padding: .5rem .6rem;
   min-width: 0;
 }
-.btn-small { font-size: .9rem; padding: .55rem 1rem; }
 .saved { font-family: var(--mono); font-size: .76rem; color: var(--accent); }
 
-@media (max-width: 560px) {
-  .facts { grid-template-columns: 1fr; gap: 0; }
-  .facts dd { margin-bottom: .55rem; }
-}
 
 /* /admin/rehber: versions and sales */
 .row-item { display: grid; gap: .3rem; padding: .9rem 0; min-width: 0; }
 .row-item form { margin-top: .2rem; }
-.form-stack .check {
-  display: flex; align-items: flex-start; gap: .55rem;
-  font-family: var(--body); font-size: .9rem; line-height: 1.45; text-transform: none; letter-spacing: 0; color: var(--muted);
-}
-.form-stack .check input { margin-top: .22rem; accent-color: var(--accent); }
+.check-inline { display: inline-flex; align-items: center; gap: .35rem; font-size: .9rem; color: var(--muted); }
+.check-inline input { accent-color: var(--accent); }
+.row-inline { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
+.row-inline form { margin: 0; }
+.slot-preview { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; font-family: var(--mono); font-size: .8rem; }
+.slot-preview li { border: 1px solid var(--rule); padding: .3rem .55rem; }

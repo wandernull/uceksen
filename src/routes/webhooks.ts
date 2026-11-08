@@ -4,6 +4,7 @@ import { ATTACH, storeAttachment } from "../lib/attachments";
 import { notifyAdmins, notifyNewMessage, recordIncoming, snippet } from "../lib/conversations";
 import { extractPlusToken, htmlToText, parseAddress, parseMessageIds, stripQuotes } from "../lib/inbound";
 import { fetchReceivedAttachments, fetchReceivedEmail, fetchSentMessageId, resendApi, type ReceivedEmail } from "../lib/mail";
+import { fulfillConsult } from "../lib/booking";
 import { fulfillGuide } from "../lib/guide";
 import { verifyStripeSignature, type CheckoutSession } from "../lib/stripe";
 import { verifyWebhook } from "../lib/webhook-signature";
@@ -166,6 +167,7 @@ webhooks.post("/stripe", async (c) => {
   // Unknown event types are acknowledged and ignored (SPEC §5.6).
   if (!event.type || !FULFIL_EVENTS.has(event.type) || !event.data?.object) return c.json({ ok: true, ignored: true });
   // Errors throw → 500 → Stripe retries; fulfilment is idempotent per session.
-  const result = await fulfillGuide(c.env, event.data.object);
-  return c.json({ ok: true, result });
+  const session = event.data.object;
+  if (session.metadata?.kind === "consult") return c.json({ ok: true, result: (await fulfillConsult(c.env, session)).result });
+  return c.json({ ok: true, result: await fulfillGuide(c.env, session) });
 });

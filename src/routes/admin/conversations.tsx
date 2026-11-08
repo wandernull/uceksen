@@ -3,7 +3,10 @@ import { csrf } from "hono/csrf";
 import type { AppEnv } from "../../env";
 import { requireAdmin } from "../../lib/admin-auth";
 import { attachmentsFor, formatSize, serveAttachment } from "../../lib/attachments";
+import { cancelBooking, loadIntent, offerConsult, paymentUrl } from "../../lib/booking";
 import { conversationUrl, deliverMessage, sendOutgoing } from "../../lib/conversations";
+import { formatEur } from "../../lib/guide";
+import { formatSlot } from "../../lib/slots";
 import { getHostTz } from "../../lib/settings";
 import { formatTr } from "../../lib/time";
 import { AdminLayout } from "../../views/layout";
@@ -100,13 +103,14 @@ admin.get("/", async (c) => {
 type Conv = {
   id: number; subject: string | null; state: State; created_at: string; last_message_at: string | null;
   source: string | null; consent_at: string | null; reply_token: string; name: string | null; email: string; phone: string | null;
+  consult_offered_at: string | null;
 };
 type Msg = {
   id: number; direction: "in" | "out"; body_text: string | null; author: string; created_at: string;
   via: string | null; send_status: string | null; send_error: string | null; from_addr: string | null;
 };
 
-const VIA_LABEL: Record<string, string> = { form: "form", email: "e-posta", web: "web", admin: "e-posta" };
+const VIA_LABEL: Record<string, string> = { form: "form", email: "e-posta", web: "web", admin: "e-posta", system: "e-posta" };
 const REPLY_MAX = 10000;
 
 admin.get("/konusma/:id{[0-9]+}", async (c) => {
@@ -114,7 +118,7 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
   const [tz, conv, msgs] = await Promise.all([
     getHostTz(c.env.DB),
     c.env.DB.prepare(
-      `SELECT c.id, c.subject, c.state, c.created_at, c.last_message_at, c.source, c.consent_at, c.reply_token, ct.name, ct.email, ct.phone
+      `SELECT c.id, c.subject, c.state, c.created_at, c.last_message_at, c.source, c.consent_at, c.reply_token, c.consult_offered_at, ct.name, ct.email, ct.phone
          FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = ?1`,
     ).bind(id).first<Conv>(),
     c.env.DB.prepare(
@@ -122,7 +126,7 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
          FROM messages WHERE conversation_id = ?1 ORDER BY created_at, id`,
     ).bind(id).all<Msg>(),
   ]);
-  const atts = await attachmentsFor(c.env.DB, id);
+  const [atts, consult] = await Promise.all([attachmentsFor(c.env.DB, id), consultFor(c.env.DB, id)]);
   if (!conv) return c.text("Konuşma bulunamadı.", 404);
   const me = c.get("admin");
   const saved = c.req.query("kaydedildi") === "1";
@@ -159,6 +163,10 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
               {saved && <span class="saved" role="status">Kaydedildi</span>}
             </form>
           </section>
+
+          {conv.source !== "rehber" && (
+            <ConsultSection env={c.env} conv={conv} consult={consult} tz={tz} signer={me.author === "gizem" ? "Gizem" : "Baran"} flash={c.req.query("odeme")} />
+          )}
 
           <section>
             <h2>Mesajlar</h2>
@@ -208,6 +216,108 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
         </AdminLayout>
       ),
   );
+});
+
+type ConsultRow = {
+  intent_id: number; token: string; created_at: string; amount_cents: number | null; currency: string | null; invoice_url: string | null;
+  expires_at: string; booking_id: number | null; start_utc: string | null; customer_tz: string | null; state: string | null;
+  reschedule_count: number | null; refund_status: string | null; cancelled_by: string | null;
+};
+
+async function consultFor(db: D1Database, convId: number) {
+  return (await db.prepare(
+    `SELECT i.id AS intent_id, i.token, i.created_at, i.amount_cents, i.currency, i.invoice_url, i.expires_at,
+            b.id AS booking_id, b.start_utc, b.customer_tz, b.state, b.reschedule_count, b.refund_status, b.cancelled_by
+       FROM booking_intents i LEFT JOIN bookings b ON b.booking_intent_id = i.id
+      WHERE i.conversation_id = ?1 ORDER BY i.id`,
+  ).bind(convId).all<ConsultRow>()).results;
+}
+
+const BOOKING_STATE: Record<string, string> = {
+  confirmed: "Onaylandı", rescheduled: "Saati değişti", cancelled: "İptal edildi", completed: "Tamamlandı", no_show: "Gelmedi",
+};
+const REFUND: Record<string, string> = { refunded: "iade edildi", not_eligible: "iade yok", failed: "İADE BAŞARISIZ — Stripe'tan elle yap" };
+
+function ConsultSection({ env, conv, consult, tz, signer, flash }: { env: Env; conv: Conv; consult: ConsultRow[]; tz: string; signer: string; flash?: string }) {
+  const payUrl = paymentUrl(env, conv.reply_token);
+  return (
+    <section id="danismanlik">
+      <h2>Durum Analizi</h2>
+      {flash === "1" && <p class="note" role="status">Ödeme bağlantısı gönderildi.</p>}
+      {flash === "0" && <p class="form-error" role="alert">Mesaj kaydedildi ama gönderilemedi. Aşağıdan tekrar gönderebilirsin.</p>}
+      {flash === "iptal" && <p class="note" role="status">Randevu iptal edildi.</p>}
+      {consult.map((r) => (
+        <dl class="facts">
+          <dt>Ödeme</dt>
+          <dd>
+            {formatEur(r.amount_cents ?? 0, r.currency ?? "eur")} · {formatTr(r.created_at, tz)}
+            {r.invoice_url ? <> · <a href={r.invoice_url} rel="noreferrer">fatura</a></> : null}
+          </dd>
+          <dt>Randevu</dt>
+          <dd>
+            {r.booking_id && r.start_utc ? (
+              <>
+                {formatSlot(r.start_utc, tz)} ({tz}) · {BOOKING_STATE[r.state ?? ""] ?? r.state}
+                {r.reschedule_count ? ` · ${r.reschedule_count} kez değişti` : ""}
+                {r.refund_status ? ` · ${REFUND[r.refund_status] ?? r.refund_status}` : ""}
+                {r.customer_tz && r.customer_tz !== tz ? <><br />Müşteri için: {formatSlot(r.start_utc, r.customer_tz)} ({r.customer_tz})</> : null}
+              </>
+            ) : (
+              `Henüz saat seçilmedi (bağlantı ${formatTr(r.expires_at, tz)} tarihine kadar geçerli)`
+            )}
+          </dd>
+          <dt>Müşteri sayfası</dt>
+          <dd><a href={`${env.APP_URL}/randevu/${r.token}`} rel="noreferrer">{`${env.APP_URL}/randevu/${r.token}`}</a></dd>
+          {r.booking_id && (r.state === "confirmed" || r.state === "rescheduled") && (
+            <>
+              <dt>İptal</dt>
+              <dd>
+                <form class="msg-retry" method="post" action={`/admin/randevu/${r.booking_id}/iptal`}>
+                  <label class="check-inline"><input type="checkbox" name="onay" required /> Eminim</label>
+                  <button class="btn-ghost btn-small" type="submit">İptal et ve tam iade yap</button>
+                </form>
+              </dd>
+            </>
+          )}
+        </dl>
+      ))}
+      {consult.length === 0 && (
+        <>
+          <p class="small">
+            {conv.consult_offered_at
+              ? `Ödeme bağlantısı ${formatTr(conv.consult_offered_at, tz)} tarihinde gönderildi; henüz ödeme yok. Bağlantı: ${payUrl}`
+              : `Durum uygunsa müşteriye ödeme ve randevu bağlantısı içeren standart bir e-posta gönder (imza: ${signer}).`}
+          </p>
+          <form method="post" action={`/admin/konusma/${conv.id}/odeme`}>
+            <button class={conv.consult_offered_at ? "btn-ghost btn-small" : "btn btn-small"} type="submit">
+              {conv.consult_offered_at ? "Bağlantıyı tekrar gönder" : "Ödeme bağlantısını gönder"}
+            </button>
+          </form>
+        </>
+      )}
+    </section>
+  );
+}
+
+admin.post("/konusma/:id{[0-9]+}/odeme", async (c) => {
+  const id = Number(c.req.param("id"));
+  const r = await offerConsult(c.env, id, c.get("admin").author);
+  if (!r) return c.text("Konuşma bulunamadı.", 404);
+  return c.redirect(`/admin/konusma/${id}?odeme=${r.sent ? 1 : 0}#danismanlik`, 303);
+});
+
+admin.post("/randevu/:id{[0-9]+}/iptal", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await c.req.parseBody();
+  if (!body.onay) return c.text("Onay kutusunu işaretle.", 400);
+  const row = await c.env.DB.prepare("SELECT i.token FROM bookings b JOIN booking_intents i ON i.id = b.booking_intent_id WHERE b.id = ?1")
+    .bind(id).first<{ token: string }>();
+  if (!row) return c.text("Randevu bulunamadı.", 404);
+  const found = (await loadIntent(c.env.DB, row.token))!;
+  if (!found.booking || found.booking.id !== id) return c.text("Randevu bulunamadı.", 404);
+  const r = await cancelBooking(c.env, found.intent, found.booking, "admin", c.get("admin").author);
+  if (!r.ok) return c.text("Bu randevu iptal edilemiyor (geçmişte ya da zaten iptal).", 409);
+  return c.redirect(`/admin/konusma/${found.intent.conversation_id}?odeme=iptal#danismanlik`, 303);
 });
 
 admin.post("/konusma/:id{[0-9]+}/durum", async (c) => {

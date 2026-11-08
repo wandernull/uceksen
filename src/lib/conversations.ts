@@ -1,11 +1,12 @@
 import type { Author } from "../env";
 import { parseAdmins } from "./admins";
-import { fetchSentMessageId, sendMail } from "./mail";
+import { buildIcs } from "./ics";
+import { fetchSentMessageId, sendMail, textToBase64, type OutMail } from "./mail";
 import { nowIso } from "./time";
 
 type MailEnv = Pick<
   Env,
-  "DB" | "ENVIRONMENT" | "DEV_EMAIL" | "RESEND_API_KEY" | "MAIL_FROM" | "REPLY_LOCAL" | "REPLY_DOMAIN" | "APP_URL" | "ADMIN_EMAILS"
+  "DB" | "ENVIRONMENT" | "DEV_EMAIL" | "RESEND_API_KEY" | "MAIL_FROM" | "MAIL_DOMAIN" | "REPLY_LOCAL" | "REPLY_DOMAIN" | "APP_URL" | "ADMIN_EMAILS"
 >;
 
 export const AUTHOR_NAME: Record<Author, string> = { gizem: "Gizem", baran: "Baran" };
@@ -71,16 +72,27 @@ function emailText(author: string, body: string, url: string): string {
   return `${body}\n\n${name}\nÜç Eksen${FOOTER(url)}`;
 }
 
+/** The booking's calendar file in its current state (a resend carries the latest times). */
+async function icsAttachment(env: MailEnv, bookingId: number): Promise<OutMail["attachments"]> {
+  const b = await env.DB.prepare(
+    `SELECT b.id, b.start_utc, b.end_utc, b.state, b.reschedule_count, b.meet_url, i.token
+       FROM bookings b JOIN booking_intents i ON i.id = b.booking_intent_id WHERE b.id = ?1`,
+  ).bind(bookingId).first<{ id: number; start_utc: string; end_utc: string; state: string; reschedule_count: number; meet_url: string | null; token: string }>();
+  if (!b) return undefined;
+  const ics = buildIcs({ ...b, manageUrl: `${env.APP_URL}/randevu/${b.token}/degistir`, domain: env.MAIL_DOMAIN });
+  return [{ filename: "durum-analizi.ics", content: textToBase64(ics), contentType: "text/calendar; charset=utf-8; method=PUBLISH" }];
+}
+
 /**
  * Sends (or re-sends) one stored outgoing message to the conversation's contact.
  * The row is written before this is called; this only updates its send status.
  */
 export async function deliverMessage(env: MailEnv, messageId: number): Promise<boolean> {
   const msg = await env.DB.prepare(
-    "SELECT id, conversation_id, body_text, author FROM messages WHERE id = ?1 AND direction = 'out'",
+    "SELECT id, conversation_id, body_text, author, booking_id FROM messages WHERE id = ?1 AND direction = 'out'",
   )
     .bind(messageId)
-    .first<{ id: number; conversation_id: number; body_text: string | null; author: string }>();
+    .first<{ id: number; conversation_id: number; body_text: string | null; author: string; booking_id: number | null }>();
   if (!msg) return false;
   const conv = await loadConversation(env.DB, msg.conversation_id);
   if (!conv) return false;
@@ -95,6 +107,7 @@ export async function deliverMessage(env: MailEnv, messageId: number): Promise<b
       replyTo: replyAddress(env, conv.plus_token),
       inReplyTo: ids.at(-1) ?? null,
       references: ids.slice(-MAX_REFERENCES),
+      attachments: msg.booking_id ? await icsAttachment(env, msg.booking_id) : undefined,
     });
     const mid = await fetchSentMessageId(env, resendId).catch(() => null);
     await env.DB.prepare(
@@ -118,14 +131,14 @@ export async function sendOutgoing(
   convId: number,
   author: Author | "system",
   body: string,
-  opts: { via: "admin" | "form" | "system"; nextState?: string } = { via: "admin" },
+  opts: { via: "admin" | "form" | "system"; nextState?: string; bookingId?: number } = { via: "admin" },
 ): Promise<{ messageId: number; sent: boolean }> {
   const now = nowIso();
   const res = await env.DB.prepare(
-    `INSERT INTO messages (conversation_id, direction, body_text, author, created_at, send_status, via)
-     VALUES (?1, 'out', ?2, ?3, ?4, 'pending', ?5)`,
+    `INSERT INTO messages (conversation_id, direction, body_text, author, created_at, send_status, via, booking_id)
+     VALUES (?1, 'out', ?2, ?3, ?4, 'pending', ?5, ?6)`,
   )
-    .bind(convId, body, author, now, opts.via)
+    .bind(convId, body, author, now, opts.via, opts.bookingId ?? null)
     .run();
   const messageId = Number(res.meta.last_row_id);
   await env.DB.prepare(
