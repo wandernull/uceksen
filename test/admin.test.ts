@@ -106,6 +106,12 @@ describe("/admin on a deployed environment", () => {
 });
 
 describe("/admin conversations (test env, no Access in front)", () => {
+  it("every admin page offers a logout through Cloudflare Access", async () => {
+    for (const path of ["/admin/", "/admin/takvim", "/admin/rehber", "/admin/eslesmeyen"]) {
+      expect(await (await SELF.fetch(`https://example.com${path}`)).text(), path).toContain('<a href="/cdn-cgi/access/logout" rel="nofollow">Çıkış</a>');
+    }
+  });
+
   async function submit(email: string, name: string, durum: string) {
     const res = await SELF.fetch("https://example.com/api/talep", {
       method: "POST",

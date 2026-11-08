@@ -99,6 +99,8 @@ export function AdminLayout({ title, current, adminName, children }: { title: st
                 <a href={href} aria-current={href === current ? "page" : undefined}>{label}</a>
               ))}
               <span class="admin-who">{adminName}</span>
+              {/* Handled by Cloudflare Access (not the Worker): revokes the Access session, then shows Cloudflare's "logged out" page. */}
+              <a href="/cdn-cgi/access/logout" rel="nofollow">Çıkış</a>
               {THEME_TOGGLE}
             </div>
           </div>
