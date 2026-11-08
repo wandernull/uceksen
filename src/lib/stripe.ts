@@ -36,7 +36,7 @@ export const INVOICE_FOOTER =
 /** Checkout look. Logo, icon and colours also come from the account branding (dashboard). */
 const BRANDING = {
   display_name: "Üç Eksen",
-  font_family: "noto_serif", // has the ₺ glyph (PT Serif does not); Source Serif 4 is not offered
+  font_family: "source_sans_pro", // sister of Source Serif 4 (not offered); clear ₺ (PT Serif lacks it, Noto Serif draws it like "Ł")
   border_style: "rectangular",
   background_color: "#F4F4F1",
   button_color: "#3A5A40",
