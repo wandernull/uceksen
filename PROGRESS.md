@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-11-08
 **Active phase:** Phase 5 — Booking, without Google
-**Status:** ✅ done — waiting for user approval; Phase 6 then needs the Google preparation (items 12–13)
+**Status:** ✅ done, approved by user 2026-11-08 — ⏸ Phase 6 blocked on Google preparation (items 12–13)
 
 ---
 
@@ -30,11 +30,11 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Phase 5 done (2026-11-08), waiting for approval. Next: Phase 6 (Google Calendar) — needs preparation items 12–13 first.
+Phase 5 done and approved (user tested booking; `.ics` imported into Google Calendar fine, 2026-11-08). Next: Phase 6 (Google Calendar, adds the Meet link) — needs preparation items 12–13 first.
 
 ## Blocked on user
 
-**Phase 5 approval**, then **before Phase 6 (SPEC §10 items 12–13):**
+**Before Phase 6 (SPEC §10 items 12–13):**
 1. GCP project with the Google Calendar API enabled; OAuth consent screen **In production** (otherwise refresh tokens expire after 7 days); OAuth client (Web application) with redirect URIs `https://uceksen.gizemderinkok.workers.dev/admin/google/callback` and `http://localhost:8787/admin/google/callback`. Put client ID + secret in `~/.gizem-creds` (e.g. `GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`).
 2. A separate calendar named **"Üç Eksen"** in `gizemderinkok@gmail.com`.
 
