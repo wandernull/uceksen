@@ -253,6 +253,28 @@ for (const [theme, expected] of Object.entries(THEMES)) {
   await ctx.close();
 }
 
+// Theme switch: OS dark by default → Açık → Koyu → Otomatik, remembered across pages.
+{
+  const ctx = await browser.newContext({ viewport: { width: 320, height: 640 }, colorScheme: "dark" });
+  const page = await ctx.newPage();
+  const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.goto(BASE + "/rehber");
+  checks++;
+  if ((await bg()) !== THEMES.dark.paper) fail("theme: OS dark not applied by default");
+  const btn = page.locator("[data-theme-toggle]");
+  if (!(await btn.isVisible())) fail("theme: switch not visible @320px");
+  await btn.click();
+  if ((await bg()) !== THEMES.light.paper) fail("theme: Açık not applied");
+  await page.goto(BASE + "/danismanlik");
+  if ((await bg()) !== THEMES.light.paper) fail("theme: choice not remembered on the next page");
+  await page.locator("[data-theme-toggle]").click();
+  if ((await page.getAttribute("html", "data-theme")) !== "dark") fail("theme: Koyu not set");
+  await page.locator("[data-theme-toggle]").click();
+  if ((await page.getAttribute("html", "data-theme")) !== null || (await bg()) !== THEMES.dark.paper) fail("theme: Otomatik not restored");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/theme-320.png` });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(`${checks} checks (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes, form → admin → reply → customer page → guide upload/purchase/download flow → availability, payment, booking, admin + /konusma pages × 3 widths × 2 themes, modal)`);
 if (failures.length) {

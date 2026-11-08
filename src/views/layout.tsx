@@ -1,4 +1,10 @@
+import { raw } from "hono/html";
 import type { Child } from "hono/jsx";
+
+/** Theme switch button; same markup as in the static pages (public/*.html), driven by /theme.js. */
+const THEME_TOGGLE = raw(
+  `<button class="theme-toggle" type="button" data-theme-toggle aria-label="Tema" title="Tema"><svg class="i-auto" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"/></svg><svg class="i-light" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.4 1.4M11.55 11.55l1.4 1.4M3.05 12.95l1.4-1.4M11.55 4.45l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><svg class="i-dark" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.5A5.75 5.75 0 1 1 6.5 2.5a4.75 4.75 0 0 0 7 7z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>`,
+);
 
 const FOOTER_NOTE =
   "Bu sitedeki mali ve hukuki bilgiler Ekim 2026 itibarıyla geçerlidir ve deneyim aktarımıdır; hukuki veya mali danışmanlık değildir. Göçmenlik dosyaları kişiye özeldir. Şirket ve oturum kararlarınızı avukat ve mali müşavirle alın.";
@@ -18,6 +24,7 @@ function Head({ title, extraCss = [], noindex = false }: { title: string; extraC
       <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       {noindex && <meta name="robots" content="noindex, nofollow" />}
       <title>{title}</title>
+      <script src="/theme.js"></script>
       <link rel="stylesheet" href="/fonts/fonts.css" />
       <link rel="stylesheet" href="/styles.css" />
       <link rel="stylesheet" href="/site.css" />
@@ -41,6 +48,7 @@ export function SiteLayout({ title, current, noindex, children }: { title: strin
               {NAV.map(([href, label]) => (
                 <a href={href} aria-current={href === current ? "page" : undefined}>{label}</a>
               ))}
+              {THEME_TOGGLE}
             </div>
           </div>
         </nav>
@@ -91,6 +99,7 @@ export function AdminLayout({ title, current, adminName, children }: { title: st
                 <a href={href} aria-current={href === current ? "page" : undefined}>{label}</a>
               ))}
               <span class="admin-who">{adminName}</span>
+              {THEME_TOGGLE}
             </div>
           </div>
         </nav>
