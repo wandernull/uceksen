@@ -1,11 +1,13 @@
 // Browser layout check against a running server (default: wrangler dev on :8787).
 // Usage: BASE_URL=http://localhost:8787 SHOTS=/some/dir node scripts/check-layout.mjs
 // Uses the locally installed Google Chrome (playwright-core, channel "chrome").
+import { readFileSync } from "node:fs";
+import { createHmac } from "node:crypto";
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:8787";
 const SHOTS = process.env.SHOTS; // optional screenshot directory
-const PAGES = ["/", "/rehber", "/danismanlik", "/hakkimizda", "/gizlilik", "/satis-kosullari"];
+const PAGES = ["/", "/rehber", "/danismanlik", "/hakkimizda", "/gizlilik", "/satis-kosullari", "/indir", "/rehber/tesekkurler"];
 const WIDTHS = [320, 375, 414, 1280];
 const THEMES = { light: { paper: "rgb(244, 244, 241)" }, dark: { paper: "rgb(18, 20, 16)" } };
 
@@ -125,6 +127,43 @@ let adminPages = [];
       if ((await page.locator('a:has-text("gelir-tablosu.pdf")').count()) !== 1) fail("/konusma reply: attachment not listed");
       await page.keyboard.press("Tab");
       adminPages.push(customerPath);
+
+      // Guide: upload a PDF in /admin/rehber, simulate Stripe's signed webhook, download via /d/{token}.
+      const stamp2 = Date.now().toString(36);
+      await page.goto(BASE + "/admin/rehber");
+      await page.fill("#g-surum", `t-${stamp2}`);
+      await page.setInputFiles("#g-pdf", { name: "rehber.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 layout test") });
+      await page.click('form[action="/admin/rehber/yukle"] button');
+      await page.waitForURL(/yuklendi=/).catch(() => {});
+      checks++;
+      if (!page.url().includes("yuklendi=")) fail("/admin/rehber: upload failed");
+      const secret = /^STRIPE_WEBHOOK_SECRET=(.+)$/m.exec(readFileSync(".dev.vars", "utf8"))?.[1]?.trim();
+      const buyer = `layout-${stamp2}@example.com`;
+      const body = JSON.stringify({ type: "checkout.session.completed", data: { object: {
+        id: `cs_layout_${stamp2}`, mode: "payment", payment_status: "paid", amount_total: 1500, currency: "eur",
+        payment_intent: null, invoice: null, metadata: { project: "uceksen", kind: "guide" }, consent: { terms_of_service: "accepted" },
+        customer_details: { email: buyer, name: "Layout Alıcı", address: { country: "TR" } } } } });
+      const t = Math.floor(Date.now() / 1000);
+      const sig = createHmac("sha256", secret ?? "").update(`${t}.${body}`).digest("hex");
+      const wh = await fetch(BASE + "/api/webhooks/stripe", { method: "POST", body, headers: { "stripe-signature": `t=${t},v1=${sig}` } });
+      checks++;
+      if (wh.status !== 200) fail(`stripe webhook: HTTP ${wh.status} (STRIPE_WEBHOOK_SECRET in .dev.vars?)`);
+      await page.goto(BASE + "/admin/rehber");
+      const saleHref = await page.locator(`.conv-list a:has-text("Layout Alıcı")`).first().getAttribute("href").catch(() => null);
+      if (!saleHref) fail("/admin/rehber: sale not listed");
+      else {
+        adminPages.push("/admin/rehber");
+        await page.goto(BASE + saleHref);
+        const dPath = (await page.locator(".msg-body").first().textContent())?.match(/\/d\/[A-Za-z0-9_-]{32}/)?.[0];
+        checks++;
+        if (!dPath) fail("delivery message has no /d/ link");
+        else {
+          await page.goto(BASE + dPath);
+          const [dl] = await Promise.all([page.waitForEvent("download"), page.click("form button")]);
+          if (dl.suggestedFilename() !== `uc-eksen-rehber-t-${stamp2}.pdf`) fail(`/d download: filename ${dl.suggestedFilename()}`);
+          adminPages.push(dPath);
+        }
+      }
     }
   }
   await ctx.close();
@@ -144,7 +183,7 @@ for (const [theme, expected] of Object.entries(THEMES)) {
       if (m.scrollW > m.clientW) fail(`${where}: horizontal scroll (${m.scrollW} > ${m.clientW})`);
       if (m.bg !== expected.paper) fail(`${where}: body background ${m.bg}`);
       if (SHOTS && width !== 1280) {
-        const name = path === "/admin/" ? "admin-list" : path.startsWith("/konusma/") ? "konusma" : "admin-detail";
+        const name = path === "/admin/" ? "admin-list" : path === "/admin/rehber" ? "admin-rehber" : path.startsWith("/d/") ? "indir-token" : path.startsWith("/konusma/") ? "konusma" : "admin-detail";
         await page.screenshot({ path: `${SHOTS}/${name}-${width}-${theme}.png`, fullPage: true });
       }
     }
@@ -166,7 +205,7 @@ for (const [theme, expected] of Object.entries(THEMES)) {
 }
 
 await browser.close();
-console.log(`${checks} checks (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes, form → admin → reply → customer page flow, admin + /konusma pages × 3 widths × 2 themes, modal)`);
+console.log(`${checks} checks (${PAGES.length} pages × ${WIDTHS.length} widths × 2 themes, form → admin → reply → customer page → guide upload/purchase/download flow, admin + /konusma pages × 3 widths × 2 themes, modal)`);
 if (failures.length) {
   console.error(`FAILED (${failures.length}):\n` + failures.map((f) => "  - " + f).join("\n"));
   process.exit(1);

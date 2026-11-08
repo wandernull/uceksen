@@ -3,9 +3,9 @@
 > Maintained by the agent. First action of every session: read this file. Update it at the end of every phase.
 > When the user returns after a break, this file tells them where things stand.
 
-**Last updated:** 2026-11-07
+**Last updated:** 2026-11-08
 **Active phase:** Phase 4 — Guide sales
-**Status:** ⏸ not started — blocked on user: Phase 4 preparation (Stripe test key, VAT/invoice decisions)
+**Status:** ✅ done — waiting for user approval (then Phase 5)
 
 ---
 
@@ -17,7 +17,7 @@
 | 1 | Static pages | ✅ | `bbdf3c0` |
 | 2 | Form and admin | ✅ | `7aadf1b`, `94b5749` (Access) |
 | 3 | Email | ✅ | `99a3b9d` |
-| 4 | Guide sales | ⏸ | — |
+| 4 | Guide sales | ✅ | see `git log --grep 'phase 4'` |
 | 5 | Booking (without Google) | ⬜ | — |
 | 6 | Google Calendar | ⬜ | — |
 | 7 | Intake, reminders, summary | ⬜ | — |
@@ -30,15 +30,15 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Phase 3 done; real-mailbox test passed (user, 2026-11-08). Phase 4 waits for its preparation items.
+Phase 4 done (2026-11-08), waiting for approval. Next: Phase 5 (booking without Google) — no user preparation needed.
 
 ## Blocked on user
 
-**Phase 4 preparation (SPEC §10 items 9–11):**
-1. Stripe account for this project (isolated). Test mode is enough for the build; KYC + bank account are needed only before go-live.
-2. Test-mode restricted key in `~/.gizem-creds` (name it e.g. `STRIPE_SECRET_KEY_UCEKSEN`). Permissions: Checkout Sessions write, Products write, Prices write, Webhook Endpoints write, Events read, Payment Intents read, Invoices write (if invoices on).
-3. Decisions: VAT handling (Stripe Tax or fixed price incl. VAT) and Stripe invoice PDFs on/off.
-4. Guide PDF — not blocking: a placeholder is used for the build; the final PDF is uploaded later through `/admin`.
+Nothing blocking. Approval of Phase 4.
+
+Not blocking, for later:
+- Upload the real guide PDF at `/admin/rehber` (version e.g. `1.0`, "güncel yap" on). The deployed site currently sells placeholder version `0.1`.
+- Accountant: 9% vs 21% NL VAT for the guide (currently tax code `txcd_10302000`, e-book, 9%).
 
 **Reference — how Access was set up** (dashboard as of 2026-11, for reference): Zero Trust → Access controls → Applications → Self-hosted and private → *Workers* → **don't** pick a Worker type (both "production and preview URLs" and "preview URLs" protect the whole Worker; neither takes a path) → instead Destinations → **+ Add public hostname**: subdomain `uceksen`, domain `gizemderinkok.workers.dev`, path `admin`. Policy `Admins` (Allow, Include → Emails: the two admin addresses). Authentication: One-time PIN (had to be added first under login methods; only "Cloudflare" was listed), instant authentication on. App name in dashboard: `uceksen`.
 
@@ -54,9 +54,9 @@ Phase 3 done; real-mailbox test passed (user, 2026-11-08). Phase 4 waits for its
 | 6 | Resend account + key | ✅ account `baran@uceksen.com`; full-access key in `~/.gizem-creds` as `RESEND_API_KEY_UCEKSEN` → `RESEND_API_KEY` in `.dev.vars` + Worker secret |
 | 7 | Company details | ✅ Back of the Envelope B.V., Keizersgracht 520H, 1017EK Amsterdam, Netherlands · KvK 97838810 · BTW NL868254010B01 · court city still unknown |
 | 8 | `DEV_EMAIL` | ✅ `bbartu.demirci@gmail.com` |
-| 9 | Stripe account (isolated, KYC) | ⬜ ask before Phase 4 |
-| 10 | Stripe test restricted key | ⬜ ask before Phase 4 |
-| 11 | Guide PDF | ⬜ ask before Phase 4 |
+| 9 | Stripe account (isolated, KYC) | 🟨 live `acct_1UZRHAJ8zQ8f9hgO` created (KYC/activation at go-live); sandbox "Üç Eksen sandbox" `acct_1UZRHhJguQXFmVyO` used for the build |
+| 10 | Stripe test key | ✅ full sandbox secret key (user's choice over restricted) in `~/.gizem-creds` as `STRIPE_SECRET_KEY_UCEKSEN` → `.dev.vars` + Worker secret `STRIPE_SECRET_KEY` |
+| 11 | Guide PDF | 🟨 placeholder `0.1` in use; real PDF uploaded by the user via `/admin/rehber` |
 | 12 | GCP project + OAuth client | ⬜ ask before Phase 6 |
 | 13 | "Üç Eksen" calendar | ⬜ in `gizemderinkok@gmail.com`, configure in Phase 6 |
 
@@ -109,6 +109,24 @@ Phase 3 done; real-mailbox test passed (user, 2026-11-08). Phase 4 waits for its
 - Resend webhook `2f6b919a-ea32-48e2-8961-5c6015b4cc09` → `https://uceksen.gizemderinkok.workers.dev/api/webhooks/resend` (`email.received`). Worker secrets: `ADMIN_EMAILS`, `DEV_EMAIL`, `RESEND_API_KEY`, `RESEND_INBOUND_SECRET`. **The webhook URL must be changed to the real domain at go-live.**
 - Tests: 99 Worker tests (DEV_EMAIL guard for every environment value, signature accept/reject incl. replay, 13 quote-stripping cases, HTML fallback, matching by header/token/late Message-ID, unmatched, dedupe, attachments, thread headers on admin replies, `/konusma` privacy headers/uploads/CSRF/honeypot/rate limit, admin reply/resend). Tests use a fake Resend and have network access disabled. Mutation-checked: disabling the guard, the signature check or quote stripping fails 11 / 4 / 13 tests. Browser check: 72 checks incl. admin reply (real send to DEV_EMAIL) and customer reply with a file.
 
+**Phase 4 — Guide sales (2026-11-08)**
+- Stripe sandbox `acct_1UZRHhJguQXFmVyO`. Stripe Tax: head office Keizersgracht 520H Amsterdam, prices tax-**inclusive**, NL registration (`small_seller`, no OSS). Products (metadata `project=uceksen`):
+  - "Üç Eksen — Rehber" `prod_VafcUBOU4v6dXg` / `price_1UZUGsJguQXFmVyOe5dbLWcY` — €15, `txcd_10302000` (e-book) → NL/DE 9%, TR 0%
+  - "Durum Analizi" `prod_VafccJ4Zqsasad` / `price_1UZUGtJguQXFmVyOrMb6Nq3j` — €200, `txcd_20060048` → NL/DE 21%, TR 0% (used in Phase 5)
+  - Price ids are plain vars in `wrangler.toml` (`STRIPE_PRICE_GUIDE`, `STRIPE_PRICE_CONSULT`).
+- Branding: account branding (icon, logo, #3a5a40 / #f4f4f1) set by the user in the sandbox dashboard. Each Checkout session also sets `branding_settings`: display name "Üç Eksen", PT Serif (closest to Source Serif 4 on offer), rectangular, the two colours. Brand files: Archivo wordmark + "ÜE" icon (generated, user keeps the originals).
+- `POST /rehber/satin-al` (the button on `/rehber` is now a form; GET redirects to `/rehber`): 503 "yakında" while no PDF is current, 20/hour/IP, then Checkout with: price, `automatic_tax`, `consent_collection.terms_of_service=required` + Turkish consent text (terms link + withdrawal-right waiver), `invoice_creation` with the B.V. legal details in the footer, `metadata.project/kind` on the session and the PaymentIntent, `locale=tr`. Success → `/rehber/tesekkurler`.
+- `POST /api/webhooks/stripe`: Stripe signature (HMAC-SHA256 hex, 5 min tolerance, several `v1` allowed) → only `checkout.session.completed` / `async_payment_succeeded` with `metadata.project=uceksen`, `kind=guide`, `payment_status=paid`; everything else 200 and ignored. Fulfilment is one D1 batch: upsert contact (existing name kept), new conversation "Rehber siparişin" (state `completed`, source `rehber`), `purchases` (+ invoice id/hosted URL, country, terms consent), `download_tokens` (7 days, 5 downloads), delivery message; then the email is sent (link, rules, amount incl. VAT, invoice link) and admins get "Yeni satış". Idempotent per session id (redeliveries send nothing; a delivery stuck in `pending` is resent).
+- Webhook endpoint `we_1UZVhCJguQXFmVyO0PR5sOT1` → `https://uceksen.gizemderinkok.workers.dev/api/webhooks/stripe`; secret in `.dev.vars` + Worker secret `STRIPE_WEBHOOK_SECRET`.
+- `/d/{token}`: GET shows a page (version, size, downloads left, valid until) and does **not** count; the "PDF'i indir" button POSTs, which counts atomically (`UPDATE … WHERE download_count < max_downloads AND expires_at > now`) and streams the current version from R2 (`Content-Disposition: attachment`, `no-store`, `noindex`, `no-referrer`). Expired / used up → 410 page with a link to `/indir`; unknown → 404. Existing tokens serve whichever version is current.
+- `/indir`: email form, honeypot, 3/hour/IP **and** 3/hour per address, same answer whether or not the address bought (no enumeration). Sends a fresh token for the latest purchase into that purchase's conversation.
+- `/admin/rehber` (new nav item): current version, upload (version label, PDF ≤ 50 MB, `%PDF-` check, unique version, optional "make current"), version list with "Güncel yap" and admin download, sales list (amount, country, downloads, invoice link, link to the conversation), total. "Alıcılara bildir": emails each purchaser once per version (25 per click, claimed in `guide_update_notices` before sending), with a new download link and an opt-out link.
+- Opt-out: `/konusma/{reply_token}/abonelik` (GET shows the button, POST toggles `contacts.guide_updates_optout_at`) — fulfils the promise on `/gizlilik`. `/satis-kosullari` "siteden" now links to `/indir`.
+- Migration `0004`: purchase → conversation link, invoice id/url, terms flag, token index, `guide_versions.size`, `contacts.guide_updates_optout_at`, `guide_update_notices`.
+- Deployed; placeholder PDF `0.1` uploaded to R2 (`guide/0.1-placeholder.pdf`) and set current on remote D1.
+- **Live sandbox test (2026-11-08):** `/rehber` → "Satın al" → branded Turkish Checkout (tax €1.24 = 9% for NL shown) → test card 4242 → `/rehber/tesekkurler`; webhook delivered and verified; purchase row (NL, terms accepted, invoice URL), delivery email sent to DEV_EMAIL; `/d/{token}` page showed 5 left, POST returned the identical PDF, page then showed 4.
+- Tests: 125 Worker tests (26 new: signature accept/reject/replay, Checkout params, closed-without-PDF, Stripe down, unsigned/foreign/unpaid events, fulfilment + email, idempotency, failed email, repeat buyer + reply threading, GET doesn't count, 5 downloads then 6th rejected, parallel last download, expired, unknown, new version served, `/indir` send/unknown/IP limit/address cap/honeypot, upload validation, update notices once + opt-out, admin page). Mutation-checked: disabling the Stripe signature check or the download limit fails 2 tests each. Browser check: 103 checks incl. admin upload → signed webhook → `/d/` download, new pages at 320–1280px light/dark (fixed: admin nav overflowed 6px at 320px with the new item — now wraps).
+
 ## Decisions made
 
 > Anything that deviates from `SPEC.md`, or that the spec did not cover, goes here with the reasoning.
@@ -143,14 +161,23 @@ Phase 3 done; real-mailbox test passed (user, 2026-11-08). Phase 4 waits for its
 - **2026-11-08 — Message-ID is SES's, not ours.** Resend ignores a custom `Message-ID`; the real one is fetched from Resend after sending (and lazily before threading/matching).
 - **2026-11-08 — One notification email to all admins** (not one per admin), so outside production it is a single test email.
 - **2026-11-08 — Email attachments are stored in R2 too** (SPEC only required them on the web path); >10 MB ones are skipped (still in Resend).
+- **2026-11-08 — Stripe: one NL B.V. account (Back of the Envelope B.V.) sells under the "Üç Eksen" brand** for NL, DE and TR customers. Stripe Tax with the NL registration in `small_seller` mode; no OSS and no Turkish KDV registration until the thresholds are reached (user's decision). Guide e-book code (9%) pending the accountant's confirmation.
+- **2026-11-08 — Full sandbox secret key instead of a restricted key** (user's choice for the build; SPEC §7 asked for restricted). Go-live should use a restricted live key.
+- **2026-11-08 — Stripe invoices on** (`invoice_creation`), legal details in the invoice footer from code; brand name "Üç Eksen" on Checkout via per-session `branding_settings`.
+- **2026-11-08 — PDF streamed through the Worker instead of a presigned R2 URL** (SPEC §5.3). Presigning needs separate R2 S3 credentials; streaming keeps the file without any public URL and lets the Worker set the download headers.
+- **2026-11-08 — `/d/{token}` GET shows a page; only the button (POST) counts a download** (SPEC said GET counts). Mail scanners and link previews open links with GET and would use up the 5 downloads.
+- **2026-11-08 — Every purchase gets its own conversation** (SPEC §4 has only `purchases.contact_id`): the delivery email threads like any other, a customer's reply ("dosya açılmıyor") lands in `/admin`, and `/indir` / update emails go into the same thread. State `completed`, so sales don't crowd "Sıra bizde"; a reply moves it to `ours`.
+- **2026-11-08 — Buying is a POST form**, not a link: crawlers following links would otherwise create Checkout sessions.
+- **2026-11-08 — `/indir` is also limited per email address** (3/hour), on top of SPEC's 3/hour/IP, so nobody can flood a purchaser's inbox from many IPs.
+- **2026-11-08 — Update notices go out in batches of 25 per click** (Worker subrequest limits), tracked per version and contact so nobody gets one twice.
 
 ## Known issues
 
 - `GH_TOKEN` lacks the `read:org` scope; `gh auth status` warns. Harmless for this repo.
 - Admin replies can't carry attachments yet (customers can attach on `/konusma`).
 - At go-live: change the Resend webhook endpoint and `APP_URL` to the real domain (links in already-sent test emails point at workers.dev).
-- `/satis-kosullari` says an expired download link can be renewed "siteden" and links to `/`; point it at `/indir` in Phase 4.
-- `/gizlilik` promises an unsubscribe link at the bottom of guide-update emails — must be implemented in Phase 4.
+- Update emails carry the opt-out link in the body only (no `List-Unsubscribe` header yet).
+- **Go-live (Phase 9), Stripe — sandbox settings do not carry over to live:** activate the live account (KYC, bank), public details (incl. terms-of-service URL, support email), branding (icon, logo, colours), Stripe Tax (head office, inclusive default, NL registration), create both products/prices and put the live price ids in `wrangler.toml`, live webhook endpoint for `https://uceksen.com/api/webhooks/stripe` (same two events) → `STRIPE_WEBHOOK_SECRET`, restricted live key → `STRIPE_SECRET_KEY` (user installs both). Decide whether Stripe also emails its own receipt/invoice (our delivery email already links the invoice).
 - `test:layout` runs locally only (needs Chrome + running dev server); not in CI.
 
 ## Open questions
@@ -159,4 +186,4 @@ Phase 3 done; real-mailbox test passed (user, 2026-11-08). Phase 4 waits for its
 
 ## Next step
 
-Phase 3 (email) — before it: domain, DNS permission on the token, Resend account + API key, MX approval.
+After approval: Phase 5 — booking without Google (availability rules, date overrides, slot computation with DST tests, `/randevu/{token}`, `bookings.start_utc` lock, `.ics`, confirmation emails, reschedule/cancel with Stripe refund). No user preparation needed.

@@ -57,7 +57,7 @@ describe("static pages", () => {
     const html = await (await get("/rehber")).text();
     expect(html).not.toContain("€29");
     expect(html).not.toContain("REPLACE_ME");
-    expect(html).toContain('href="/rehber/satin-al"');
+    expect(html).toContain('<form method="post" action="/rehber/satin-al">');
   });
 
   it("serves the stylesheets and fonts", async () => {
@@ -66,9 +66,13 @@ describe("static pages", () => {
     }
   });
 
-  it("buy placeholder answers 503 in Turkish until Phase 4", async () => {
-    const res = await get("/rehber/satin-al");
+  it("buying answers 503 in Turkish while no guide PDF is uploaded", async () => {
+    const res = await SELF.fetch("https://example.com/rehber/satin-al", { method: "POST", headers: { origin: "https://example.com" } });
     expect(res.status).toBe(503);
     expect(await res.text()).toContain("Satış çok yakında açılıyor");
+  });
+
+  it("terms page links the fresh-link page", async () => {
+    expect(await (await get("/satis-kosullari")).text()).toContain('<a href="/indir">siteden</a>');
   });
 });

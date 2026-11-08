@@ -1,9 +1,11 @@
 import { Hono } from "hono";
 import type { AppEnv } from "./env";
 import { admin } from "./routes/admin/conversations";
+import { adminGuide } from "./routes/admin/guide";
 import { health } from "./routes/health";
 import { konusma } from "./routes/konusma";
 import { pages } from "./routes/pages";
+import { rehber } from "./routes/rehber";
 import { talep } from "./routes/talep";
 import { webhooks } from "./routes/webhooks";
 
@@ -22,7 +24,9 @@ app.route("/health", health);
 app.route("/api/talep", talep);
 app.route("/api/webhooks", webhooks);
 app.route("/konusma", konusma);
+app.route("/admin/rehber", adminGuide);
 app.route("/admin", admin);
+app.route("/", rehber);
 app.route("/", pages);
 
 // In production, matching static files never reach the Worker. Unmatched paths

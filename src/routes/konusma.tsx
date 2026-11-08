@@ -5,7 +5,7 @@ import { ATTACH, attachmentsFor, extensionAllowed, formatSize, serveAttachment, 
 import { AUTHOR_NAME, notifyNewMessage, recordIncoming } from "../lib/conversations";
 import { allow, clientIp } from "../lib/rate-limit";
 import { getHostTz } from "../lib/settings";
-import { formatTr } from "../lib/time";
+import { formatTr, nowIso } from "../lib/time";
 import { MessagePage, SiteLayout } from "../views/layout";
 
 export const konusma = new Hono<AppEnv>();
@@ -185,4 +185,51 @@ konusma.get(`/:token${TOKEN}/ek/:id{[0-9]+}`, async (c) => {
   ).bind(Number(c.req.param("id")), c.req.param("token")).first<{ r2_key: string; filename: string; content_type: string }>();
   if (!row) return c.html(notFound(), 404);
   return serveAttachment(c.env, row);
+});
+
+// Guide update emails link here ("Rehber güncellemeleriyle ilgili e-posta almak istemiyorsan").
+// GET only shows the button: mail scanners open links, they must not unsubscribe anyone.
+async function contactFor(db: D1Database, token: string) {
+  return db.prepare(
+    `SELECT ct.id, ct.guide_updates_optout_at FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.reply_token = ?1`,
+  ).bind(token).first<{ id: number; guide_updates_optout_at: string | null }>();
+}
+
+function OptOutPage({ token, out }: { token: string; out: boolean }) {
+  return (
+    <SiteLayout title="Rehber güncellemeleri — Üç Eksen" noindex>
+      <header>
+        <p class="eyebrow">Rehber</p>
+        <h1>Rehber güncellemeleri</h1>
+        <p class="lede">
+          {out
+            ? "Rehberin yeni sürümleri için artık e-posta göndermiyoruz. Satın alma ve konuşmalarla ilgili e-postalar gelmeye devam eder."
+            : "Rehberin yeni sürümü çıktığında yeni indirme bağlantısını e-postayla gönderiyoruz."}
+        </p>
+      </header>
+      <form method="post" action={`/konusma/${token}/abonelik`}>
+        <input type="hidden" name="islem" value={out ? "ac" : "kapat"} />
+        <button class={out ? "btn-ghost" : "btn"} type="submit">
+          {out ? "Güncelleme e-postalarını yeniden al" : "Güncelleme e-postalarını alma"}
+        </button>
+      </form>
+    </SiteLayout>
+  );
+}
+
+konusma.get(`/:token${TOKEN}/abonelik`, async (c) => {
+  const token = c.req.param("token");
+  const ct = await contactFor(c.env.DB, token);
+  if (!ct) return c.html(notFound(), 404);
+  return c.html("<!doctype html>" + <OptOutPage token={token} out={!!ct.guide_updates_optout_at} />);
+});
+
+konusma.post(`/:token${TOKEN}/abonelik`, async (c) => {
+  const token = c.req.param("token");
+  const ct = await contactFor(c.env.DB, token);
+  if (!ct) return c.html(notFound(), 404);
+  const optOut = (await c.req.parseBody()).islem !== "ac";
+  await c.env.DB.prepare("UPDATE contacts SET guide_updates_optout_at = ?1 WHERE id = ?2")
+    .bind(optOut ? nowIso() : null, ct.id).run();
+  return c.redirect(`/konusma/${token}/abonelik`, 303);
 });

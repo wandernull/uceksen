@@ -2,6 +2,7 @@
 
 .admin-wrap { max-width: 54rem; gap: 2.25rem; padding-block: 2.25rem 4rem; }
 .admin-inner { max-width: 54rem; }
+.admin-inner .nav-links { flex-wrap: wrap; gap: .4rem 1rem; }
 .admin-h1 { font-size: clamp(1.8rem, 6vw, 2.4rem); line-height: 1.05; }
 .admin-who { color: var(--ink); }
 .eyebrow a { text-decoration: none; }
@@ -88,3 +89,12 @@
   .facts { grid-template-columns: 1fr; gap: 0; }
   .facts dd { margin-bottom: .55rem; }
 }
+
+/* /admin/rehber: versions and sales */
+.row-item { display: grid; gap: .3rem; padding: .9rem 0; min-width: 0; }
+.row-item form { margin-top: .2rem; }
+.form-stack .check {
+  display: flex; align-items: flex-start; gap: .55rem;
+  font-family: var(--body); font-size: .9rem; line-height: 1.45; text-transform: none; letter-spacing: 0; color: var(--muted);
+}
+.form-stack .check input { margin-top: .22rem; accent-color: var(--accent); }

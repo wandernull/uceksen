@@ -118,7 +118,7 @@ export async function sendOutgoing(
   convId: number,
   author: Author | "system",
   body: string,
-  opts: { via: "admin" | "form"; nextState?: string } = { via: "admin" },
+  opts: { via: "admin" | "form" | "system"; nextState?: string } = { via: "admin" },
 ): Promise<{ messageId: number; sent: boolean }> {
   const now = nowIso();
   const res = await env.DB.prepare(

@@ -21,7 +21,7 @@ export const STATE_LABEL: Record<State, string> = {
 };
 
 const AUTHOR_LABEL: Record<string, string> = { customer: "Müşteri", gizem: "Gizem", baran: "Baran", system: "Sistem" };
-const SOURCE_LABEL: Record<string, string> = { danismanlik: "Danışmanlık sayfası", hakkimizda: "Hakkımızda sayfası" };
+const SOURCE_LABEL: Record<string, string> = { danismanlik: "Danışmanlık sayfası", hakkimizda: "Hakkımızda sayfası", rehber: "Rehber satın alımı" };
 
 const isState = (s: string | undefined): s is State => !!s && (STATES as readonly string[]).includes(s);
 

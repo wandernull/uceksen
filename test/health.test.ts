@@ -24,6 +24,7 @@ describe("schema", () => {
       "conversations",
       "date_overrides",
       "download_tokens",
+      "guide_update_notices",
       "guide_versions",
       "messages",
       "purchases",

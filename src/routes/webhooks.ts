@@ -4,6 +4,8 @@ import { ATTACH, storeAttachment } from "../lib/attachments";
 import { notifyAdmins, notifyNewMessage, recordIncoming, snippet } from "../lib/conversations";
 import { extractPlusToken, htmlToText, parseAddress, parseMessageIds, stripQuotes } from "../lib/inbound";
 import { fetchReceivedAttachments, fetchReceivedEmail, fetchSentMessageId, resendApi, type ReceivedEmail } from "../lib/mail";
+import { fulfillGuide } from "../lib/guide";
+import { verifyStripeSignature, type CheckoutSession } from "../lib/stripe";
 import { verifyWebhook } from "../lib/webhook-signature";
 
 export const webhooks = new Hono<AppEnv>();
@@ -144,4 +146,26 @@ webhooks.post("/resend", async (c) => {
 
   await notifyNewMessage(c.env, convId, "Yeni yanıt (e-posta)", text);
   return c.json({ ok: true, matched: true });
+});
+
+// --- Stripe ---------------------------------------------------------------------
+
+const FULFIL_EVENTS = new Set(["checkout.session.completed", "checkout.session.async_payment_succeeded"]);
+
+webhooks.post("/stripe", async (c) => {
+  const body = await c.req.text();
+  if (!(await verifyStripeSignature(c.env.STRIPE_WEBHOOK_SECRET, c.req.header("stripe-signature"), body))) {
+    return c.json({ ok: false }, 401);
+  }
+  let event: { type?: string; data?: { object?: CheckoutSession } };
+  try {
+    event = JSON.parse(body);
+  } catch {
+    return c.json({ ok: false }, 400);
+  }
+  // Unknown event types are acknowledged and ignored (SPEC §5.6).
+  if (!event.type || !FULFIL_EVENTS.has(event.type) || !event.data?.object) return c.json({ ok: true, ignored: true });
+  // Errors throw → 500 → Stripe retries; fulfilment is idempotent per session.
+  const result = await fulfillGuide(c.env, event.data.object);
+  return c.json({ ok: true, result });
 });
