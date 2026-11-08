@@ -38,6 +38,8 @@ Phase 5 done and approved (user tested booking; `.ics` imported into Google Cale
 1. GCP project with the Google Calendar API enabled; OAuth consent screen **In production** (otherwise refresh tokens expire after 7 days); OAuth client (Web application) with redirect URIs `https://uceksen.gizemderinkok.workers.dev/admin/google/callback` and `http://localhost:8787/admin/google/callback`. Put client ID + secret in `~/.gizem-creds` (e.g. `GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`).
 2. A separate calendar named **"Üç Eksen"** in `gizemderinkok@gmail.com`.
 
+Note (2026-11-08): the GCP project/OAuth client may live in `bbartu.demirci@gmail.com`; Gizem signs in on the consent screen, so the token and the calendar are hers. Expect Google's "app not verified" warning once (Advanced → continue); fine for a single internal user.
+
 Not blocking, for later:
 - Set real working hours at `/admin/takvim` (staging has none, so the booking page shows "boş saat yok").
 - Upload the real guide PDF at `/admin/rehber` (version e.g. `1.0`, "güncel yap" on). The deployed site currently sells placeholder version `0.1`.
