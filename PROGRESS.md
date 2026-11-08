@@ -4,8 +4,8 @@
 > When the user returns after a break, this file tells them where things stand.
 
 **Last updated:** 2026-11-07
-**Active phase:** Phase 3 — Email
-**Status:** ⏸ code done and deployed — waiting for the user's real-mailbox test
+**Active phase:** Phase 4 — Guide sales
+**Status:** ⏸ not started — blocked on user: Phase 4 preparation (Stripe test key, VAT/invoice decisions)
 
 ---
 
@@ -16,8 +16,8 @@
 | 0 | Skeleton | ✅ | `8b74e18` |
 | 1 | Static pages | ✅ | `bbdf3c0` |
 | 2 | Form and admin | ✅ | `7aadf1b`, `94b5749` (Access) |
-| 3 | Email | 🔄 | — |
-| 4 | Guide sales | ⬜ | — |
+| 3 | Email | ✅ | `99a3b9d` |
+| 4 | Guide sales | ⏸ | — |
 | 5 | Booking (without Google) | ⬜ | — |
 | 6 | Google Calendar | ⬜ | — |
 | 7 | Intake, reminders, summary | ⬜ | — |
@@ -30,14 +30,15 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Phase 3 code is done, deployed and verified live by the agent (form → acknowledgement sent; simulated reply through the real `reply.` MX + webhook matched by In-Reply-To, quote stripped, state → ours). Remaining: the user's real-mailbox test (SPEC §9 Phase 3 test), then mark Phase 3 done.
+Phase 3 done; real-mailbox test passed (user, 2026-11-08). Phase 4 waits for its preparation items.
 
 ## Blocked on user
 
-**Real-mailbox test** (inbox: DEV_EMAIL `bbartu.demirci@gmail.com`):
-1. Find "[TEST] Durum Analizi talebi — Üç Eksen" (live test conversation "Canlı Test") — reply to it from Gmail with a short text.
-2. Within a minute the reply should appear in `/admin` → that conversation, without the quoted part; an "[Üç Eksen] Yeni yanıt (e-posta)" notification arrives too.
-3. Reply from `/admin`; the email should arrive in the same Gmail thread.
+**Phase 4 preparation (SPEC §10 items 9–11):**
+1. Stripe account for this project (isolated). Test mode is enough for the build; KYC + bank account are needed only before go-live.
+2. Test-mode restricted key in `~/.gizem-creds` (name it e.g. `STRIPE_SECRET_KEY_UCEKSEN`). Permissions: Checkout Sessions write, Products write, Prices write, Webhook Endpoints write, Events read, Payment Intents read, Invoices write (if invoices on).
+3. Decisions: VAT handling (Stripe Tax or fixed price incl. VAT) and Stripe invoice PDFs on/off.
+4. Guide PDF — not blocking: a placeholder is used for the build; the final PDF is uploaded later through `/admin`.
 
 **Reference — how Access was set up** (dashboard as of 2026-11, for reference): Zero Trust → Access controls → Applications → Self-hosted and private → *Workers* → **don't** pick a Worker type (both "production and preview URLs" and "preview URLs" protect the whole Worker; neither takes a path) → instead Destinations → **+ Add public hostname**: subdomain `uceksen`, domain `gizemderinkok.workers.dev`, path `admin`. Policy `Admins` (Allow, Include → Emails: the two admin addresses). Authentication: One-time PIN (had to be added first under login methods; only "Cloudflare" was listed), instant authentication on. App name in dashboard: `uceksen`.
 
@@ -97,7 +98,7 @@ Phase 3 code is done, deployed and verified live by the agent (form → acknowle
 - `_dmarc.uceksen.com` TXT `v=DMARC1; p=none;` (monitoring only).
 - Site is still on workers.dev; `uceksen.com` has no A/CNAME until go-live.
 
-**Phase 3 — Email code (2026-11-08)**
+**Phase 3 — Email code (2026-11-08, done; real-mailbox test passed)**
 - `src/lib/mail.ts`: Resend client; **DEV_EMAIL guard inside `sendMail`** (every recipient → DEV_EMAIL unless `ENVIRONMENT === "production"`, intended recipients written at the top of the body, subject prefixed `[TEST]`; no DEV_EMAIL ⇒ nothing is sent).
 - Outgoing: message row written first (`send_status` pending → sent/failed), then sent. Subject `<conversation subject> — Üç Eksen`, `Re: …` after the first message. `Reply-To: merhaba+<plus_token>@reply.uceksen.com`, `In-Reply-To`/`References` from the conversation's stored Message-IDs, footer link to `/konusma/<reply_token>`. Admin replies are signed with the admin's name.
 - Contact form now sends the acknowledgement (quotes the form text) + one admin notification. Email failures never fail the form; a failed message shows "Gönderilemedi" + "Tekrar gönder" in `/admin`.
