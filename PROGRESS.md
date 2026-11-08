@@ -114,7 +114,7 @@ Not blocking, for later:
   - "Üç Eksen — Rehber" `prod_VafcUBOU4v6dXg` / `price_1UZUGsJguQXFmVyOe5dbLWcY` — €15, `txcd_10302000` (e-book) → NL/DE 9%, TR 0%
   - "Durum Analizi" `prod_VafccJ4Zqsasad` / `price_1UZUGtJguQXFmVyOrMb6Nq3j` — €200, `txcd_20060048` → NL/DE 21%, TR 0% (used in Phase 5)
   - Price ids are plain vars in `wrangler.toml` (`STRIPE_PRICE_GUIDE`, `STRIPE_PRICE_CONSULT`).
-- Branding: account branding (icon, logo, #3a5a40 / #f4f4f1) set by the user in the sandbox dashboard. Each Checkout session also sets `branding_settings`: display name "Üç Eksen", PT Serif (closest to Source Serif 4 on offer), rectangular, the two colours. Brand files: Archivo wordmark + "ÜE" icon (generated, user keeps the originals).
+- Branding: account branding (icon, logo, #3a5a40 / #f4f4f1) set by the user in the sandbox dashboard. Each Checkout session also sets `branding_settings`: display name "Üç Eksen", Noto Serif (PT Serif was used first but has no ₺ glyph; Source Serif 4 is not offered), rectangular, the two colours. Brand files: Archivo wordmark + "ÜE" icon (generated, user keeps the originals).
 - `POST /rehber/satin-al` (the button on `/rehber` is now a form; GET redirects to `/rehber`): 503 "yakında" while no PDF is current, 20/hour/IP, then Checkout with: price, `automatic_tax`, `consent_collection.terms_of_service=required` + Turkish consent text (terms link + withdrawal-right waiver), `invoice_creation` with the B.V. legal details in the footer, `metadata.project/kind` on the session and the PaymentIntent, `locale=tr`. Success → `/rehber/tesekkurler`.
 - `POST /api/webhooks/stripe`: Stripe signature (HMAC-SHA256 hex, 5 min tolerance, several `v1` allowed) → only `checkout.session.completed` / `async_payment_succeeded` with `metadata.project=uceksen`, `kind=guide`, `payment_status=paid`; everything else 200 and ignored. Fulfilment is one D1 batch: upsert contact (existing name kept), new conversation "Rehber siparişin" (state `completed`, source `rehber`), `purchases` (+ invoice id/hosted URL, country, terms consent), `download_tokens` (7 days, 5 downloads), delivery message; then the email is sent (link, rules, amount incl. VAT, invoice link) and admins get "Yeni satış". Idempotent per session id (redeliveries send nothing; a delivery stuck in `pending` is resent).
 - Webhook endpoint `we_1UZVhCJguQXFmVyO0PR5sOT1` → `https://uceksen.gizemderinkok.workers.dev/api/webhooks/stripe`; secret in `.dev.vars` + Worker secret `STRIPE_WEBHOOK_SECRET`.
@@ -167,6 +167,7 @@ Not blocking, for later:
 - **2026-11-08 — PDF streamed through the Worker instead of a presigned R2 URL** (SPEC §5.3). Presigning needs separate R2 S3 credentials; streaming keeps the file without any public URL and lets the Worker set the download headers.
 - **2026-11-08 — `/d/{token}` GET shows a page; only the button (POST) counts a download** (SPEC said GET counts). Mail scanners and link previews open links with GET and would use up the 5 downloads.
 - **2026-11-08 — Every purchase gets its own conversation** (SPEC §4 has only `purchases.contact_id`): the delivery email threads like any other, a customer's reply ("dosya açılmıyor") lands in `/admin`, and `/indir` / update emails go into the same thread. State `completed`, so sales don't crowd "Sıra bizde"; a reply moves it to `ours`.
+- **2026-11-08 — Adaptive Pricing is on (Stripe default):** TR visitors see and pay in TRY (e.g. ₺871,73 for €15), Stripe converts. Sales are booked in EUR from `currency_conversion`; the delivery email shows what the customer paid. Open question to the user: keep lira for TR buyers or force EUR.
 - **2026-11-08 — Buying is a POST form**, not a link: crawlers following links would otherwise create Checkout sessions.
 - **2026-11-08 — `/indir` is also limited per email address** (3/hour), on top of SPEC's 3/hour/IP, so nobody can flood a purchaser's inbox from many IPs.
 - **2026-11-08 — Update notices go out in batches of 25 per click** (Worker subrequest limits), tracked per version and contact so nobody gets one twice.
@@ -182,7 +183,7 @@ Not blocking, for later:
 
 ## Open questions
 
-—
+- Adaptive Pricing: keep local-currency checkout (TRY for Turkish buyers; Stripe adds an FX margin for the buyer) or turn it off (dashboard → Settings → Adaptive Pricing, or per session `adaptive_pricing.enabled=false`)?
 
 ## Next step
 

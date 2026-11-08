@@ -105,8 +105,11 @@ export async function fulfillGuide(env: GuideEnv, s: CheckoutSession): Promise<F
   const name = s.customer_details?.name?.trim() || null;
   const token = randomToken();
   const replyToken = randomToken();
-  const amount = s.amount_total ?? 0;
-  const currency = s.currency ?? "eur";
+  // Book the sale in our price currency (EUR), even if the customer paid in e.g. TRY;
+  // the email shows what the customer actually paid.
+  const paid = formatEur(s.amount_total ?? 0, s.currency ?? "eur");
+  const amount = s.currency_conversion?.amount_total ?? s.amount_total ?? 0;
+  const currency = s.currency_conversion?.source_currency ?? s.currency ?? "eur";
   const db = env.DB;
   try {
     await db.batch([
@@ -131,7 +134,7 @@ export async function fulfillGuide(env: GuideEnv, s: CheckoutSession): Promise<F
       db.prepare(
         `INSERT INTO messages (conversation_id, direction, body_text, author, created_at, send_status, via)
          VALUES ((SELECT id FROM conversations WHERE reply_token = ?1), 'out', ?2, 'system', ?3, 'pending', 'system')`,
-      ).bind(replyToken, deliveryBody(env, { name: name ?? null, token, amount: formatEur(amount, currency), invoiceUrl }), now),
+      ).bind(replyToken, deliveryBody(env, { name: name ?? null, token, amount: paid, invoiceUrl }), now),
     ]);
   } catch (err) {
     // Two deliveries of the same event racing each other: the other one won.
@@ -147,7 +150,7 @@ export async function fulfillGuide(env: GuideEnv, s: CheckoutSession): Promise<F
     "Rehber satıldı.",
     "",
     name ? `${name} <${email}>` : email,
-    `Tutar: ${formatEur(amount, currency)} · Ülke: ${s.customer_details?.address?.country ?? "—"}`,
+    `Tutar: ${formatEur(amount, currency)}${s.currency_conversion ? ` (müşteri ${paid} ödedi)` : ""} · Ülke: ${s.customer_details?.address?.country ?? "—"}`,
     "",
     `Aç: ${env.APP_URL}/admin/konusma/${conv!.id}`,
   ]);

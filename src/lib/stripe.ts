@@ -36,7 +36,7 @@ export const INVOICE_FOOTER =
 /** Checkout look. Logo, icon and colours also come from the account branding (dashboard). */
 const BRANDING = {
   display_name: "Üç Eksen",
-  font_family: "pt_serif", // closest to Source Serif 4 that Checkout offers
+  font_family: "noto_serif", // has the ₺ glyph (PT Serif does not); Source Serif 4 is not offered
   border_style: "rectangular",
   background_color: "#F4F4F1",
   button_color: "#3A5A40",
@@ -58,6 +58,8 @@ export type CheckoutSession = {
   metadata: Record<string, string> | null;
   consent: { terms_of_service?: string | null } | null;
   customer_details: { email: string | null; name: string | null; address: { country: string | null } | null } | null;
+  /** Set when Adaptive Pricing charged the customer in their local currency (amount_total/currency are then local). */
+  currency_conversion?: { amount_total: number; source_currency: string; fx_rate: string } | null;
 };
 
 export async function createGuideCheckout(

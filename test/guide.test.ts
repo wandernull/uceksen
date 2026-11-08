@@ -216,6 +216,16 @@ describe("POST /api/webhooks/stripe", () => {
     expect((await messages(p.conversation_id))[0]).toMatchObject({ direction: "out", author: "system", via: "system", send_status: "sent" });
   });
 
+  it("books a lira payment (Adaptive Pricing) in EUR; the customer's email shows lira", async () => {
+    const { p } = await buy({
+      currency: "try", amount_total: 87173, customer_details: { email: "lira@example.com", name: "Ali Veli", address: { country: "TR" } },
+      currency_conversion: { amount_total: 1500, amount_subtotal: 1500, source_currency: "eur", fx_rate: "58.1153" },
+    });
+    expect(p).toMatchObject({ amount_cents: 1500, currency: "eur", country: "TR" });
+    expect(fake.sent[0]!.text).toMatch(/Ödenen: ₺871,73 \(KDV dahil\)/);
+    expect(fake.sent[1]!.text).toContain("müşteri ₺871,73 ödedi");
+  });
+
   it("is idempotent: a redelivered event creates nothing and sends nothing", async () => {
     const { s } = await buy();
     fake.reset();
