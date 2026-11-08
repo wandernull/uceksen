@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-11-08
 **Active phase:** Phase 4 — Guide sales
-**Status:** ✅ done — waiting for user approval (then Phase 5)
+**Status:** ✅ done, approved by user 2026-11-08 — Phase 5 next
 
 ---
 
@@ -17,7 +17,7 @@
 | 1 | Static pages | ✅ | `bbdf3c0` |
 | 2 | Form and admin | ✅ | `7aadf1b`, `94b5749` (Access) |
 | 3 | Email | ✅ | `99a3b9d` |
-| 4 | Guide sales | ✅ | see `git log --grep 'phase 4'` |
+| 4 | Guide sales | ✅ | `3ecf790`, `a6c96d5`, `b6f0e4b` (₺ font) |
 | 5 | Booking (without Google) | ⬜ | — |
 | 6 | Google Calendar | ⬜ | — |
 | 7 | Intake, reminders, summary | ⬜ | — |
@@ -30,11 +30,11 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Phase 4 done (2026-11-08), waiting for approval. Next: Phase 5 (booking without Google) — no user preparation needed.
+Phase 4 done and approved (user tested the full flow incl. TR/lira checkout, 2026-11-08). Next: Phase 5 (booking without Google) — no user preparation needed.
 
 ## Blocked on user
 
-Nothing blocking. Approval of Phase 4.
+Nothing blocking.
 
 Not blocking, for later:
 - Upload the real guide PDF at `/admin/rehber` (version e.g. `1.0`, "güncel yap" on). The deployed site currently sells placeholder version `0.1`.
