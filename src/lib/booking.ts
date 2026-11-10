@@ -35,7 +35,7 @@ export function offerBody(env: Pick<Env, "APP_URL">, name: string | null, replyT
     "Durumunu okuduk; Durum Analizi senin için uygun. Ödeme ve randevu adımına buradan geçebilirsin:",
     paymentUrl(env, replyToken),
     "",
-    "Ücret €200 (KDV dahil): 90 dakika görüşme ve birkaç gün içinde yazılı özet. Ödemeden hemen sonra takvimden sana uyan saati seçiyorsun.",
+    "Ücret €100 (KDV dahil): 90 dakika görüşme ve birkaç gün içinde yazılı özet. Ödemeden hemen sonra takvimden sana uyan saati seçiyorsun.",
   ].join("\n");
 }
 

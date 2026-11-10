@@ -31,7 +31,7 @@ REPLY_LOCAL = "merhaba"
 REPLY_DOMAIN = "reply.uceksen.com"
 # Stripe prices (sandbox ids during the build; replaced with live ids at go-live).
 STRIPE_PRICE_GUIDE = "price_1UZUGsJguQXFmVyOe5dbLWcY"
-STRIPE_PRICE_CONSULT = "price_1UZUGtJguQXFmVyOrMb6Nq3j"
+STRIPE_PRICE_CONSULT = "price_1UaLI4JguQXFmVyOT5C8HrYe"
 # Secrets (wrangler secret put): ADMIN_EMAILS ("gizem=a@x.com,baran=b@y.com"),
 # DEV_EMAIL, RESEND_API_KEY, RESEND_INBOUND_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
 # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ENCRYPTION_KEY (base64, 32 bytes)

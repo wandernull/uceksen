@@ -272,9 +272,10 @@ konusma.get(`/:token${TOKEN}/odeme`, async (c) => {
           <section>
             <div class="boxed">
               <div class="price-row">
-                <span class="price">€200</span>
+                <span class="price">€100</span>
                 <span class="price-note">KDV dahil<br />Tek seferlik ödeme</span>
               </div>
+              <p class="price-launch">Lansman fiyatı. 1 Şubat 2027'den itibaren €200.</p>
               <form method="post" action={`/konusma/${token}/odeme`}>
                 <button class="btn" type="submit">Ödemeye geç</button>
               </form>

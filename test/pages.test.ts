@@ -53,11 +53,21 @@ describe("static pages", () => {
     expect(await (await get("/satis-kosullari")).text()).toContain("yetkili mahkemeler Amsterdam, Hollanda");
   });
 
-  it("guide page has no launch-price note and no Stripe placeholder", async () => {
+  it("guide page: €15 launch price, no Stripe placeholder", async () => {
     const html = await (await get("/rehber")).text();
-    expect(html).not.toContain("€29");
+    expect(html).toContain('<span class="price">€15</span>');
+    expect(html).toContain("Lansman fiyatı. 1 Şubat 2027'den itibaren €30.");
+    expect(html).not.toContain("<s>"); // no crossed-out reference price (EU price rules)
     expect(html).not.toContain("REPLACE_ME");
     expect(html).toContain('<form method="post" action="/rehber/satin-al">');
+  });
+
+  it("consulting: €100 launch price on the page and in the terms; the home page shows no prices", async () => {
+    const d = await (await get("/danismanlik")).text();
+    expect(d).toContain('<span class="price">€100</span>');
+    expect(d).toContain("1 Şubat 2027'den itibaren €200.");
+    expect(await (await get("/satis-kosullari")).text()).toContain("Fiyat €100'dür (lansman fiyatı; 1 Şubat 2027'den itibaren €200)");
+    expect(await (await get("/")).text()).not.toContain("€");
   });
 
   it("serves the stylesheets and fonts", async () => {

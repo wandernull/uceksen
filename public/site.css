@@ -145,3 +145,6 @@ button.btn-ghost { background: transparent; cursor: pointer; }
 [data-theme-choice="auto"] .theme-toggle .i-auto,
 [data-theme-choice="light"] .theme-toggle .i-light,
 [data-theme-choice="dark"] .theme-toggle .i-dark { display: block; }
+
+/* Launch price note under the price (no strikethrough: EU rules on reference prices). */
+.price-launch { font-family: var(--mono); font-size: .78rem; color: var(--accent); margin: .4rem 0 0; }

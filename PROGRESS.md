@@ -206,6 +206,8 @@ Not blocking, for later:
 - **2026-11-10 — Access token cached in KV, encrypted** (AES-GCM, separate purpose from the refresh token). Ciphertexts bind their purpose as AAD. Losing/rotating the Worker's `ENCRYPTION_KEY` means reconnecting Google once.
 - **2026-11-10 — GCP project lives in `baran@botelabs.io`** (user's choice). Only Gizem sees the consent screen (support email shown there); customers never see anything from Google.
 
+- **2026-11-10 — Consultation €100 (was €200); launch prices, no strikethrough.** User asked for crossed-out "was" prices (~~€30~~ €15, ~~€200~~ €100). Not done: under the EU Price Indication Directive art. 6a (Omnibus, ACM in NL) a crossed-out price must be the lowest price actually charged in the previous 30 days, and neither was ever charged. Instead (user's choice): "Lansman fiyatı. 1 Şubat 2027'den itibaren €30 / €200" under the price on `/rehber`, `/danismanlik`, the payment page and the terms. The home page shows no prices. Sandbox consult price now `price_1UaLI4JguQXFmVyOT5C8HrYe` (€100, inclusive); the €200 price is archived.
+
 ## Known issues
 
 - `GH_TOKEN` lacks the `read:org` scope; `gh auth status` warns. Harmless for this repo.
@@ -217,6 +219,7 @@ Not blocking, for later:
 - At go-live: `APP_URL` → `https://uceksen.com` makes the OAuth redirect `https://uceksen.com/admin/google/callback` (already registered in the Google client). Google stays connected (token is in D1).
 - Intake form link in the confirmation email comes with Phase 7.
 - **Go-live (Phase 9), Stripe — sandbox settings do not carry over to live:** activate the live account (KYC, bank), public details (incl. terms-of-service URL, support email), branding (icon, logo, colours), Stripe Tax (head office, inclusive default, NL registration), create both products/prices and put the live price ids in `wrangler.toml`, live webhook endpoint for `https://uceksen.com/api/webhooks/stripe` (same two events) → `STRIPE_WEBHOOK_SECRET`, restricted live key → `STRIPE_SECRET_KEY` (user installs both). Decide whether Stripe also emails its own receipt/invoice (our delivery email already links the invoice).
+- **1 February 2027: the launch prices end — raise them for real** (new live Stripe prices €30 / €200 → `wrangler.toml`; remove the "Lansman fiyatı" notes; terms page). Announcing a future price and not applying it is misleading under consumer law. Moving the date is fine, but do it before it passes.
 - `test:layout` runs locally only (needs Chrome + running dev server); not in CI.
 
 ## Open questions
