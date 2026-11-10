@@ -9,6 +9,7 @@ import { konusma } from "./routes/konusma";
 import { pages } from "./routes/pages";
 import { randevu } from "./routes/randevu";
 import { rehber } from "./routes/rehber";
+import { seo } from "./routes/seo";
 import { talep } from "./routes/talep";
 import { webhooks } from "./routes/webhooks";
 
@@ -24,6 +25,7 @@ app.use("*", async (c, next) => {
 });
 
 app.route("/health", health);
+app.route("/", seo);
 app.route("/api/talep", talep);
 app.route("/api/webhooks", webhooks);
 app.route("/konusma", konusma);

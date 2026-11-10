@@ -2,9 +2,9 @@ import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 const PAGES: [path: string, title: string][] = [
-  ["/", "Üç Eksen"],
-  ["/rehber", "Rehber — Üç Eksen"],
-  ["/danismanlik", "Danışmanlık — Üç Eksen"],
+  ["/", "Üç Eksen — Avrupa’ya açılan Türkler için oturum, vergi ve şirket"],
+  ["/rehber", "Üç Eksen rehberi — Avrupa’da oturum, vergi ve şirketin kurulma sırası"],
+  ["/danismanlik", "Durum Analizi — birebir danışmanlık | Üç Eksen"],
   ["/hakkimizda", "Hakkımızda — Üç Eksen"],
   ["/gizlilik", "Gizlilik — Üç Eksen"],
   ["/satis-kosullari", "Satış Koşulları — Üç Eksen"],
@@ -26,7 +26,7 @@ describe("static pages", () => {
       // No third-party font CDN, no leftover prototype links or placeholders.
       expect(html).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
       expect(html).not.toMatch(/href="[^"]*\.html"/);
-      expect(html.replace(/<script>[\s\S]*?<\/script>/g, "")).not.toMatch(/\[[^\]]+\]/);
+      expect(html.replace(/<script[^>]*>[\s\S]*?<\/script>/g, "")).not.toMatch(/\[[^\]]+\]/);
       // Same nav everywhere; current page marked.
       const nav = html.match(/<div class="nav-links">([\s\S]*?)<\/div>/)?.[1] ?? "";
       expect([...nav.matchAll(/href="([^"]+)"/g)].map((m) => m[1])).toEqual(["/rehber", "/danismanlik", "/hakkimizda"]);

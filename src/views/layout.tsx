@@ -24,6 +24,9 @@ function Head({ title, extraCss = [], noindex = false }: { title: string; extraC
       <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       {noindex && <meta name="robots" content="noindex, nofollow" />}
       <title>{title}</title>
+      <link rel="icon" href="/favicon.ico" sizes="32x32" />
+      <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+      <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       <script src="/theme.js"></script>
       <link rel="stylesheet" href="/fonts/fonts.css" />
       <link rel="stylesheet" href="/styles.css" />
