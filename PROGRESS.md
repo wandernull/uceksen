@@ -3,9 +3,9 @@
 > Maintained by the agent. First action of every session: read this file. Update it at the end of every phase.
 > When the user returns after a break, this file tells them where things stand.
 
-**Last updated:** 2026-11-08
-**Active phase:** Phase 5 — Booking, without Google
-**Status:** ✅ done, approved by user 2026-11-08 — ⏸ Phase 6 blocked on Google preparation (items 12–13)
+**Last updated:** 2026-11-10
+**Active phase:** Phase 6 — Google Calendar
+**Status:** ⏸ built, tested and deployed to staging — waiting for the user to connect Google from `/admin/takvim` (SPEC §11 step 4), then a live test
 
 ---
 
@@ -19,7 +19,7 @@
 | 3 | Email | ✅ | `99a3b9d` |
 | 4 | Guide sales | ✅ | `3ecf790`, `a6c96d5`, `b6f0e4b` (₺ font) |
 | 5 | Booking (without Google) | ✅ | see `git log --grep 'phase 5'` |
-| 6 | Google Calendar | ⬜ | — |
+| 6 | Google Calendar | ⏸ | not committed yet (deployed to staging manually) |
 | 7 | Intake, reminders, summary | ⬜ | — |
 | 8 | Cleanup and resilience | ⬜ | — |
 | 9 | Go live | ⬜ | — |
@@ -30,15 +30,13 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Phase 5 done and approved (user tested booking; `.ics` imported into Google Calendar fine, 2026-11-08). Next: Phase 6 (Google Calendar, adds the Meet link) — needs preparation items 12–13 first.
+Phase 6 (Google Calendar). Code done: OAuth from `/admin/takvim`, encrypted refresh token, freebusy, events with Meet links, reschedule/cancel sync, admin retry. 174 tests pass; migration `0006` applied to remote D1; Worker deployed manually (not committed yet). After the user connects: live test on staging (temporary hours → sandbox payment → booking → event + Meet link in "Üç Eksen" → reschedule → cancel), then commit `phase 6: …`.
 
 ## Blocked on user
 
-**Before Phase 6 (SPEC §10 items 12–13):**
-1. GCP project with the Google Calendar API enabled; OAuth consent screen **In production** (otherwise refresh tokens expire after 7 days); OAuth client (Web application) with redirect URIs `https://uceksen.gizemderinkok.workers.dev/admin/google/callback` and `http://localhost:8787/admin/google/callback`. Put client ID + secret in `~/.gizem-creds` (e.g. `GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`).
-2. A separate calendar named **"Üç Eksen"** in `gizemderinkok@gmail.com`.
+**Phase 6, SPEC §11 step 4:** open `https://uceksen.gizemderinkok.workers.dev/admin/takvim` → "Google Takvim" → **Google'a bağlan** → sign in as `gizemderinkok@gmail.com` → "Google hasn't verified this app" → Advanced → Go to Üç Eksen → leave all boxes ticked → Continue. Back on the page: check that the booking calendar is "Üç Eksen" and the busy calendars include Gizem's main calendar and Baran's shared one.
 
-Note (2026-11-08): the GCP project/OAuth client may live in `bbartu.demirci@gmail.com`; Gizem signs in on the consent screen, so the token and the calendar are hers. Expect Google's "app not verified" warning once (Advanced → continue); fine for a single internal user.
+Google preparation (done 2026-11-10): GCP project `uceksen` under `baran@botelabs.io`, Calendar API on, consent screen External + **In production** (unverified; fine for one user), scopes `calendar.events`, `calendar.freebusy`, `calendar.calendarlist.readonly`, no logo (a logo forces verification). Authorized domains `uceksen.com` + `gizemderinkok.workers.dev`; homepage/privacy/terms links point at `uceksen.com`. Web client `uceksen-web` with redirect URIs for workers.dev, `uceksen.com` and `localhost:8787` (`/admin/google/callback`). Client id/secret in `~/.gizem-creds` (`GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`) → `.dev.vars` + Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; `ENCRYPTION_KEY` generated separately for local and the Worker. "Üç Eksen" calendar created; Baran's calendar shared free/busy with Gizem.
 
 Not blocking, for later:
 - Set real working hours at `/admin/takvim` (staging has none, so the booking page shows "boş saat yok").
@@ -62,8 +60,8 @@ Not blocking, for later:
 | 9 | Stripe account (isolated, KYC) | 🟨 live `acct_1UZRHAJ8zQ8f9hgO` created (KYC/activation at go-live); sandbox "Üç Eksen sandbox" `acct_1UZRHhJguQXFmVyO` used for the build |
 | 10 | Stripe test key | ✅ full sandbox secret key (user's choice over restricted) in `~/.gizem-creds` as `STRIPE_SECRET_KEY_UCEKSEN` → `.dev.vars` + Worker secret `STRIPE_SECRET_KEY` |
 | 11 | Guide PDF | 🟨 placeholder `0.1` in use; real PDF uploaded by the user via `/admin/rehber` |
-| 12 | GCP project + OAuth client | ⬜ ask before Phase 6 |
-| 13 | "Üç Eksen" calendar | ⬜ in `gizemderinkok@gmail.com`, configure in Phase 6 |
+| 12 | GCP project + OAuth client | ✅ 2026-11-10, see "Blocked on user" |
+| 13 | "Üç Eksen" calendar | ✅ in `gizemderinkok@gmail.com`; chosen after connecting |
 
 ## Completed
 
@@ -169,7 +167,7 @@ Not blocking, for later:
 - **2026-11-07 — `ADMIN_EMAILS` format `gizem=…,baran=…`** (SPEC said plain comma-separated) so the admin's identity maps to `messages.author`. Kept as a secret because the repo is public.
 - **2026-11-07 — Each form submission opens a new conversation**, even for a known email (SPEC §5.1). The contact is upserted; empty phone does not erase a stored one.
 - **2026-11-07 — Google refresh token encrypted at rest** (AES-GCM, key from `ENCRYPTION_KEY` secret) instead of plaintext in `settings`.
-- **2026-11-07 — Single Google calendar:** the "Üç Eksen" calendar in `gizemderinkok@gmail.com`. OAuth is done with that account; freebusy queries that account's calendars only (SPEC §5.5 mentions gizem + baran; reduced to gizem).
+- **2026-11-07 — Single Google calendar:** the "Üç Eksen" calendar in `gizemderinkok@gmail.com`. OAuth is done with that account. ~~freebusy queries that account's calendars only~~ — superseded 2026-11-10: busy calendars are selectable and include Baran's (shared free/busy with Gizem), as SPEC §5.5 intended.
 - **2026-11-07 — Guide price is €15 permanently.** SPEC §1 "€29 from December" dropped. One Stripe price.
 - **2026-11-07 — Mailbox must stay possible later.** Planned for Phase 3: inbound threading (Reply-To `merhaba+{token}@…`) goes to a dedicated subdomain (e.g. `reply.uceksen.com`) with its own MX to Resend, so the root domain's MX can later be moved to a real mailbox provider without breaking conversation threading. Confirm with user at start of Phase 3.
 - **2026-11-07 — Replies go to `merhaba+{plus_token}@reply.uceksen.com`** (SPEC §5.2 said `merhaba+…@uceksen.com`). The root MX belongs to Cloudflare Email Routing, so Resend receives on a dedicated subdomain. A future mailbox on the root never breaks threading. Direct mail to `merhaba@uceksen.com` is forwarded by Email Routing, not ingested.
@@ -200,6 +198,14 @@ Not blocking, for later:
 - **2026-11-08 — A paid consult session without a matching conversation** is acknowledged and reported to admins ("Eşleşmeyen Durum Analizi ödemesi"), not retried.
 - **2026-11-08 — Update notices go out in batches of 25 per click** (Worker subrequest limits), tracked per version and contact so nobody gets one twice.
 
+- **2026-11-10 — Busy calendars are chosen in `/admin/takvim`.** Default after connecting: Gizem's main calendar + people's calendars shared with her (personal addresses, e.g. Baran's); not holidays/subscriptions/secondary calendars. A calendar shared but never added to her list can be added by address. The booking calendar itself is never "busy": bookings are counted from the database.
+- **2026-11-10 — Google unreadable → no slots (fail closed).** If Google is connected but freebusy fails (outage, revoked grant, a calendar no longer shared), customers see "Takvimi şu an kontrol edemiyoruz" and booking is refused, rather than risk booking over a private appointment. Admins get one alert per 6 hours. Not connected at all → slots from hours only (Phase 5 behaviour).
+- **2026-11-10 — Google failure never loses a booking.** The DB booking stands; `bookings.gcal_status = failed` + admin notice; the confirmation says the link will follow. "Tekrar dene" on the conversation page re-syncs and, if that creates the Meet link, emails it to the customer with an updated `.ics`.
+- **2026-11-10 — Our own Google event ids** (`uc…`, base32hex) are written to the booking before the insert, so a retry cannot create a second event (409 → patch). Reschedule patches the same event (Meet link unchanged); cancel deletes it. Every write uses `sendUpdates=none`, no attendees.
+- **2026-11-10 — Redirect URI derived from `APP_URL`** (`{APP_URL}/admin/google/callback`) instead of a `GOOGLE_REDIRECT_URI` variable (SPEC §6). The callback is under `/admin`, so Cloudflare Access protects it; OAuth state is one-time, 10 min, bound to the admin, plus PKCE.
+- **2026-11-10 — Access token cached in KV, encrypted** (AES-GCM, separate purpose from the refresh token). Ciphertexts bind their purpose as AAD. Losing/rotating the Worker's `ENCRYPTION_KEY` means reconnecting Google once.
+- **2026-11-10 — GCP project lives in `baran@botelabs.io`** (user's choice). Only Gizem sees the consent screen (support email shown there); customers never see anything from Google.
+
 ## Known issues
 
 - `GH_TOKEN` lacks the `read:org` scope; `gh auth status` warns. Harmless for this repo.
@@ -207,7 +213,8 @@ Not blocking, for later:
 - At go-live: change the Resend webhook endpoint and `APP_URL` to the real domain (links in already-sent test emails point at workers.dev).
 - Update emails carry the opt-out link in the body only (no `List-Unsubscribe` header yet).
 - `max_per_week` is checked when slots are listed, not inside the booking statement: two people booking the last two free places of a week at the same moment could exceed it by one. Same-slot double booking is impossible.
-- Confirmation says the Meet link "will follow" until Phase 6 creates it.
+- The customer joins Meet without being invited, so Gizem has to admit them ("ask to join"). Intentional: inviting would make Google email the customer.
+- At go-live: `APP_URL` → `https://uceksen.com` makes the OAuth redirect `https://uceksen.com/admin/google/callback` (already registered in the Google client). Google stays connected (token is in D1).
 - Intake form link in the confirmation email comes with Phase 7.
 - **Go-live (Phase 9), Stripe — sandbox settings do not carry over to live:** activate the live account (KYC, bank), public details (incl. terms-of-service URL, support email), branding (icon, logo, colours), Stripe Tax (head office, inclusive default, NL registration), create both products/prices and put the live price ids in `wrangler.toml`, live webhook endpoint for `https://uceksen.com/api/webhooks/stripe` (same two events) → `STRIPE_WEBHOOK_SECRET`, restricted live key → `STRIPE_SECRET_KEY` (user installs both). Decide whether Stripe also emails its own receipt/invoice (our delivery email already links the invoice).
 - `test:layout` runs locally only (needs Chrome + running dev server); not in CI.
@@ -218,4 +225,4 @@ Not blocking, for later:
 
 ## Next step
 
-After approval and items 12–13: Phase 6 — Google Calendar (OAuth from `/admin`, encrypted refresh token, freebusy subtracted from slots, `events.insert` with no attendees + Meet link, event updates on reschedule/cancel). ⏸ user step inside Phase 6: grant consent once from `/admin`.
+User connects Google from `/admin/takvim` → live test on staging → commit `phase 6` → approval → Phase 7 (intake, reminders, summary).

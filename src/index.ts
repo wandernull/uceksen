@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "./env";
 import { admin } from "./routes/admin/conversations";
+import { adminGoogle } from "./routes/admin/google";
 import { adminGuide } from "./routes/admin/guide";
 import { adminSchedule } from "./routes/admin/schedule";
 import { health } from "./routes/health";
@@ -27,6 +28,7 @@ app.route("/api/talep", talep);
 app.route("/api/webhooks", webhooks);
 app.route("/konusma", konusma);
 app.route("/admin/rehber", adminGuide);
+app.route("/admin/google", adminGoogle);
 app.route("/admin/takvim", adminSchedule);
 app.route("/admin", admin);
 app.route("/", rehber);

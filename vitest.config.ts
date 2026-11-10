@@ -15,15 +15,19 @@ export default defineConfig({
           RESEND_INBOUND_SECRET: "whsec_dGVzdC13ZWJob29rLXNlY3JldC0wMTIzNDU2Nzg5YWI=",
           STRIPE_SECRET_KEY: "sk_test_fake",
           STRIPE_WEBHOOK_SECRET: "whsec_test_stripe_secret",
+          GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com",
+          GOOGLE_CLIENT_SECRET: "test-google-secret",
+          // base64 of 32 bytes, test only
+          ENCRYPTION_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
           TEST_MIGRATIONS: await readD1Migrations("./migrations"),
         },
-        // Tests never reach the network: Resend and Stripe are faked in test/fake-*.ts,
+        // Tests never reach the network: Resend, Stripe and Google are faked in test/fake-*.ts,
         // anything else that slips through fails loudly.
         outboundService: () => new Response("network disabled in tests", { status: 599 }),
       },
     })),
   ],
   test: {
-    setupFiles: ["./test/apply-migrations.ts", "./test/fake-resend.ts", "./test/fake-stripe.ts"],
+    setupFiles: ["./test/apply-migrations.ts", "./test/fake-resend.ts", "./test/fake-stripe.ts", "./test/fake-google.ts"],
   },
 });

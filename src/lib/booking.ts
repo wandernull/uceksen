@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import type { Author } from "../env";
 import { AUTHOR_NAME, deliverMessage, notifyAdmins, sendOutgoing } from "./conversations";
+import { googleBusy, GoogleError, googleProblem, syncBookingEvent, type GoogleEnv, type SyncResult } from "./google";
 import { formatEur } from "./guide";
 import { loadAvailability } from "./settings";
 import { computeSlots, formatSlot, isoUtc, SESSION_MINUTES } from "./slots";
@@ -12,7 +13,7 @@ type BookingEnv = Pick<
   Env,
   | "DB" | "ENVIRONMENT" | "DEV_EMAIL" | "RESEND_API_KEY" | "MAIL_FROM" | "MAIL_DOMAIN" | "REPLY_LOCAL" | "REPLY_DOMAIN" | "APP_URL"
   | "ADMIN_EMAILS" | "STRIPE_SECRET_KEY"
->;
+> & GoogleEnv;
 
 /** Policy from /satis-kosullari. */
 export const CONSULT = { intentDays: 60, rescheduleHours: 24, refundHours: 48, maxReschedules: 2 } as const;
@@ -175,10 +176,53 @@ export function policy(b: Booking, now = DateTime.utc()) {
   };
 }
 
-/** Slots on offer right now (optionally ignoring one booking: the one being moved). */
-export async function availableSlots(db: D1Database, excludeBookingId?: number, now = DateTime.utc()) {
-  const a = await loadAvailability(db, { excludeBookingId });
-  return computeSlots({ ...a, now });
+/**
+ * Slots on offer right now (optionally ignoring one booking: the one being moved).
+ * Throws GoogleError when Google is connected but cannot be read.
+ */
+export async function availableSlots(env: GoogleEnv, excludeBookingId?: number, now = DateTime.utc()) {
+  const a = await loadAvailability(env.DB, { excludeBookingId });
+  const busy = await googleBusy(env, now, now.plus({ days: a.settings.max_horizon_days + 2 }));
+  return computeSlots({ ...a, busy: busy ?? [], now });
+}
+
+/** For pages: no slots (and one admin alert per 6 hours) while Google cannot be read. */
+export async function offeredSlots(env: BookingEnv, excludeBookingId?: number) {
+  try {
+    return { slots: await availableSlots(env, excludeBookingId), problem: null };
+  } catch (err) {
+    if (!(err instanceof GoogleError)) throw err;
+    console.error("slots: google", err.message);
+    await alertGoogle(env, err);
+    return { slots: [], problem: googleProblem(err) };
+  }
+}
+
+async function alertGoogle(env: BookingEnv, err: unknown) {
+  const key = "google:alerted";
+  if (await env.KV.get(key)) return;
+  await env.KV.put(key, "1", { expirationTtl: 6 * 3600 });
+  await notifyAdmins(env, "Google Takvim sorunu", [
+    googleProblem(err),
+    "",
+    "Sorun sürdükçe müşteriler boş saat göremez.",
+    `Kontrol: ${env.APP_URL}/admin/takvim`,
+  ]);
+}
+
+/** Line for the admin notification when the Google event could not be written. */
+const googleLine = (g: SyncResult) =>
+  g.status === "failed" ? ["", `GOOGLE TAKVİM'E YAZILAMADI: ${g.error ?? ""}`, "Konuşma sayfasından tekrar dene."] : [];
+
+/** Slots for a booking request; a Google failure means "cannot check now". */
+async function slotsForBooking(env: BookingEnv, excludeBookingId: number | undefined, now: DateTime<true>) {
+  try {
+    return await availableSlots(env, excludeBookingId, now);
+  } catch (err) {
+    if (!(err instanceof GoogleError)) throw err;
+    await alertGoogle(env, err);
+    return null;
+  }
 }
 
 /**
@@ -212,14 +256,16 @@ export function confirmBody(env: Pick<Env, "APP_URL">, p: { name: string | null;
   ].join("\n");
 }
 
-export type BookResult = { ok: true; bookingId: number } | { ok: false; reason: "taken" | "unavailable" | "expired" | "already" };
+export type BookResult = { ok: true; bookingId: number } | { ok: false; reason: "taken" | "unavailable" | "expired" | "already" | "calendar" };
 
 /** Books one slot for a paid intent. The database decides who gets a contested slot. */
 export async function bookSlot(env: BookingEnv, intent: Intent, startIso: string, tz: string): Promise<BookResult> {
   const now = DateTime.utc();
   if (intent.used_at) return { ok: false, reason: "already" };
   if (DateTime.fromISO(intent.expires_at, { zone: "utc" }) <= now) return { ok: false, reason: "expired" };
-  const slot = (await availableSlots(env.DB, undefined, now)).find((s) => s.start === startIso);
+  const offered = await slotsForBooking(env, undefined, now);
+  if (!offered) return { ok: false, reason: "calendar" };
+  const slot = offered.find((s) => s.start === startIso);
   if (!slot) return { ok: false, reason: "unavailable" };
 
   const { lo, hi } = await bufferBounds(env.DB, slot.start, slot.end);
@@ -247,7 +293,9 @@ export async function bookSlot(env: BookingEnv, intent: Intent, startIso: string
     env.DB.prepare("UPDATE booking_intents SET used_at = ?1 WHERE id = ?2").bind(ts, intent.id),
     env.DB.prepare("UPDATE conversations SET state = 'theirs' WHERE id = ?1").bind(intent.conversation_id),
   ]);
-  await sendOutgoing(env, intent.conversation_id, "system", confirmBody(env, { name: intent.name, token: intent.token, start: slot.start, tz, meetUrl: null }), {
+  // Database first (above); only now Google. The email carries the Meet link if it worked.
+  const g = await syncBookingEvent(env, bookingId);
+  await sendOutgoing(env, intent.conversation_id, "system", confirmBody(env, { name: intent.name, token: intent.token, start: slot.start, tz, meetUrl: g.meetUrl }), {
     via: "system",
     bookingId,
   });
@@ -257,6 +305,7 @@ export async function bookSlot(env: BookingEnv, intent: Intent, startIso: string
     intent.name ? `${intent.name} <${intent.email}>` : intent.email,
     `Tarih: ${when(slot.start, await hostTz(env.DB))}`,
     `Müşterinin saat dilimi: ${tz}`,
+    ...googleLine(g),
     "",
     `Aç: ${env.APP_URL}/admin/konusma/${intent.conversation_id}`,
   ]);
@@ -288,10 +337,12 @@ export async function rescheduleBooking(
   booking: Booking,
   startIso: string,
   tz: string,
-): Promise<{ ok: true } | { ok: false; reason: "not_allowed" | "unavailable" | "taken" }> {
+): Promise<{ ok: true } | { ok: false; reason: "not_allowed" | "unavailable" | "taken" | "calendar" }> {
   const now = DateTime.utc();
   if (!policy(booking, now).canReschedule) return { ok: false, reason: "not_allowed" };
-  const slot = (await availableSlots(env.DB, booking.id, now)).find((s) => s.start === startIso);
+  const offered = await slotsForBooking(env, booking.id, now);
+  if (!offered) return { ok: false, reason: "calendar" };
+  const slot = offered.find((s) => s.start === startIso);
   if (!slot || slot.start === booking.start_utc) return { ok: false, reason: "unavailable" };
   const { lo, hi } = await bufferBounds(env.DB, slot.start, slot.end);
   let res: D1Result;
@@ -310,6 +361,7 @@ export async function rescheduleBooking(
   }
   if (!res.meta.changes) return { ok: false, reason: "taken" };
   const left = CONSULT.maxReschedules - (booking.reschedule_count + 1);
+  const g = await syncBookingEvent(env, booking.id);
   await sendOutgoing(env, intent.conversation_id, "system", rescheduleBody(env, { name: intent.name, token: intent.token, start: slot.start, tz, left }), {
     via: "system",
     bookingId: booking.id,
@@ -321,6 +373,7 @@ export async function rescheduleBooking(
     intent.name ? `${intent.name} <${intent.email}>` : intent.email,
     `Eski: ${when(booking.start_utc, host)}`,
     `Yeni: ${when(slot.start, host)}`,
+    ...googleLine(g),
     "",
     `Aç: ${env.APP_URL}/admin/konusma/${intent.conversation_id}`,
   ]);
@@ -381,6 +434,7 @@ export async function cancelBooking(
       refund = "failed";
     }
   }
+  const g = await syncBookingEvent(env, booking.id);
   await env.DB.batch([
     env.DB.prepare("UPDATE bookings SET refund_status = ?1, stripe_refund_id = ?2 WHERE id = ?3").bind(refund, refundId, booking.id),
     env.DB.prepare("UPDATE conversations SET state = ?1 WHERE id = ?2").bind(refund === "failed" ? "ours" : "closed", intent.conversation_id),
@@ -396,8 +450,47 @@ export async function cancelBooking(
     intent.name ? `${intent.name} <${intent.email}>` : intent.email,
     `Tarih: ${when(booking.start_utc, await hostTz(env.DB))}`,
     `İade: ${{ refunded: `yapıldı (${amount})`, not_eligible: "yok (48 saatten az kalmıştı)", failed: "BAŞARISIZ — Stripe panelinden elle yap" }[refund]}`,
+    ...(g.status === "failed" ? ["", `Google Takvim'deki etkinlik silinemedi (${g.error ?? ""}); elle sil.`] : []),
     "",
     `Aç: ${env.APP_URL}/admin/konusma/${intent.conversation_id}`,
   ]);
   return { ok: true, refund };
+}
+
+// --- 6. Google retry (admin) -----------------------------------------------------------------------
+
+export function meetBody(env: Pick<Env, "APP_URL">, p: { name: string | null; token: string; start: string; tz: string; meetUrl: string }): string {
+  return [
+    hello(p.name),
+    "",
+    "Görüşmenin bağlantısı hazır:",
+    p.meetUrl,
+    "",
+    `Tarih: ${when(p.start, p.tz)}`,
+    "",
+    "Güncel takvim dosyası ekte; açtığında bağlantı takvimindeki görüşmeye eklenir.",
+    "",
+    `Saati değiştirmek ya da iptal etmek için: ${manageUrl(env, p.token)}`,
+  ].join("\n");
+}
+
+/**
+ * Admin's "try Google again". If this is what finally created the Meet link, the customer
+ * (who was told the link would follow) gets it by email with the updated calendar file.
+ */
+export async function retryGoogle(env: BookingEnv, bookingId: number): Promise<SyncResult | null> {
+  const before = await env.DB.prepare(
+    `SELECT b.meet_url, b.start_utc, b.customer_tz, i.token, i.conversation_id, ct.name
+       FROM bookings b JOIN booking_intents i ON i.id = b.booking_intent_id JOIN contacts ct ON ct.id = b.contact_id WHERE b.id = ?1`,
+  ).bind(bookingId).first<{ meet_url: string | null; start_utc: string; customer_tz: string; token: string; conversation_id: number; name: string | null }>();
+  if (!before) return null;
+  const g = await syncBookingEvent(env, bookingId);
+  const now = await env.DB.prepare("SELECT state, start_utc FROM bookings WHERE id = ?1").bind(bookingId).first<{ state: string; start_utc: string }>();
+  const live = now && (now.state === "confirmed" || now.state === "rescheduled");
+  if (g.status === "synced" && g.meetUrl && !before.meet_url && live) {
+    await sendOutgoing(env, before.conversation_id, "system",
+      meetBody(env, { name: before.name, token: before.token, start: now.start_utc, tz: before.customer_tz, meetUrl: g.meetUrl }),
+      { via: "system", bookingId });
+  }
+  return g;
 }

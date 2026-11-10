@@ -3,7 +3,8 @@ import { csrf } from "hono/csrf";
 import { DateTime } from "luxon";
 import type { AppEnv } from "../../env";
 import { requireAdmin } from "../../lib/admin-auth";
-import { availableSlots } from "../../lib/booking";
+import { offeredSlots } from "../../lib/booking";
+import { getGoogleSettings, googleProblem, isWritable, listCalendars, type CalendarEntry, type GoogleSettings } from "../../lib/google";
 import { getSlotSettings } from "../../lib/settings";
 import { formatSlot, isHhmm, isValidZone, WEEKDAYS_TR } from "../../lib/slots";
 import { nowIso } from "../../lib/time";
@@ -28,6 +29,21 @@ function zones(): string[] {
 }
 
 const adminName = (a: { author: string }) => (a.author === "gizem" ? "Gizem" : "Baran");
+const GOOGLE_MSG: Record<string, { ok?: string; error?: string }> = {
+  bagli: { ok: "Google bağlandı. Takvim seçimlerini aşağıdan kontrol et." },
+  takvimyok: { error: "Google bağlandı ama “Üç Eksen” adlı, yazılabilir bir takvim bulunamadı. Google Takvim'de oluştur, sonra aşağıdan seç." },
+  kaydedildi: { ok: "Takvim seçimleri kaydedildi." },
+  kesildi: { ok: "Google bağlantısı kesildi." },
+  state: { error: "Bağlantı isteği geçersiz ya da süresi doldu. Tekrar dene." },
+  denied: { error: "Google izni verilmedi." },
+  scopes: { error: "İzinlerin hepsi gerekli. Tekrar bağlan ve Google ekranındaki bütün kutuları işaretli bırak." },
+  no_refresh: { error: "Google kalıcı izin vermedi. Tekrar bağlan." },
+  google: { error: "Google'a ulaşılamadı. Tekrar dene." },
+  hata: { error: "Google takvim listesi alınamadı. Tekrar dene." },
+  gecersiz: { error: "Takvim seçimi geçersiz." },
+  onay: { error: "Bağlantıyı kesmek için onay kutusunu işaretle." },
+};
+
 const MSG: Record<string, string> = {
   ayarlar: "Ayarlar kaydedildi.",
   kural: "Çalışma saati eklendi.",
@@ -38,7 +54,17 @@ const MSG: Record<string, string> = {
 
 async function page(c: { env: Env; get: (k: "admin") => { author: string } }, flash: { ok?: string; error?: string } = {}) {
   const db = c.env.DB;
-  const [s, rules, overrides, upcoming, slots] = await Promise.all([
+  const google = await getGoogleSettings(db);
+  let cals: CalendarEntry[] | null = null;
+  let calsError: string | null = null;
+  if (google.refreshEnc) {
+    try {
+      cals = await listCalendars(c.env);
+    } catch (err) {
+      calsError = googleProblem(err);
+    }
+  }
+  const [s, rules, overrides, upcoming, offered] = await Promise.all([
     getSlotSettings(db),
     db.prepare("SELECT id, weekday, start_time, end_time FROM availability_rules WHERE active = 1 ORDER BY weekday, start_time").all<RuleRow>(),
     db.prepare("SELECT id, date, type, start_time, end_time, note FROM date_overrides WHERE date >= date('now', '-1 day') ORDER BY date, start_time").all<OverrideRow>(),
@@ -47,8 +73,9 @@ async function page(c: { env: Env; get: (k: "admin") => { author: string } }, fl
          FROM bookings b JOIN contacts ct ON ct.id = b.contact_id
         WHERE b.state IN ('confirmed', 'rescheduled') AND b.end_utc > ?1 ORDER BY b.start_utc LIMIT 100`,
     ).bind(nowIso()).all<UpcomingRow>(),
-    availableSlots(db),
+    offeredSlots(c.env),
   ]);
+  const slots = offered.slots;
   const tz = s.host_tz;
   const allZones = zones();
 
@@ -63,6 +90,8 @@ async function page(c: { env: Env; get: (k: "admin") => { author: string } }, fl
         </header>
         {flash.ok && <p class="note" role="status">{flash.ok}</p>}
         {flash.error && <p class="form-error" role="alert">{flash.error}</p>}
+
+        <GoogleSection google={google} cals={cals} calsError={calsError ?? offered.problem} />
 
         <section>
           <h2>Yaklaşan randevular</h2>
@@ -196,8 +225,69 @@ async function page(c: { env: Env; get: (k: "admin") => { author: string } }, fl
 
 adminSchedule.get("/", async (c) => {
   const k = c.req.query("kaydedildi");
-  return c.html(await page(c, { ok: k ? MSG[k] : undefined }));
+  const g = c.req.query("google");
+  return c.html(await page(c, g ? (GOOGLE_MSG[g] ?? {}) : { ok: k ? MSG[k] : undefined }));
 });
+
+function GoogleSection({ google, cals, calsError }: { google: GoogleSettings; cals: CalendarEntry[] | null; calsError: string | null }) {
+  if (!google.refreshEnc) {
+    return (
+      <section id="google">
+        <h2>Google Takvim</h2>
+        <p class="small">
+          Bağlı değil. Bağlanınca Google Takvim'deki dolu saatlerin müşteriye gösterilmez ve her randevu için “Üç Eksen” takviminde
+          Meet bağlantılı bir etkinlik oluşur. Müşteri davet edilmez; Google ona hiçbir şey göndermez.
+        </p>
+        <p class="small">Gizem'in Google hesabıyla bağlan. Google “uygulama doğrulanmadı” derse: Gelişmiş → Üç Eksen'e git.</p>
+        <form method="post" action="/admin/google/baglan">
+          <button class="btn btn-small" type="submit">Google'a bağlan</button>
+        </form>
+      </section>
+    );
+  }
+  const listed = new Set((cals ?? []).map((x) => x.id));
+  const manual = google.busy.filter((id) => !listed.has(id));
+  const name = (id: string | null) => (cals ?? []).find((x) => x.id === id)?.summary ?? id ?? "—";
+  return (
+    <section id="google">
+      <h2>Google Takvim</h2>
+      <dl class="facts">
+        <dt>Hesap</dt><dd>{google.account ?? "—"}</dd>
+        <dt>Randevu takvimi</dt><dd>{google.calendarId ? name(google.calendarId) : <strong>seçilmedi: randevular Google'a yazılmıyor</strong>}</dd>
+        <dt>Dolu sayılan</dt><dd>{google.busy.length ? google.busy.map(name).join(", ") : "hiçbiri"}</dd>
+      </dl>
+      {calsError && <p class="form-error" role="alert">{calsError}</p>}
+      {cals && (
+        <form class="form-stack" method="post" action="/admin/google/ayarlar">
+          <label for="g-takvim">Randevu takvimi <span class="opt">(etkinlik ve Meet bağlantısı buraya)</span></label>
+          <select id="g-takvim" name="takvim" required>
+            {!google.calendarId && <option value="">Seç…</option>}
+            {cals.filter(isWritable).map((x) => <option value={x.id} selected={x.id === google.calendarId}>{x.summary}</option>)}
+          </select>
+          <fieldset class="check-list">
+            <legend>Dolu sayılan takvimler <span class="opt">(buradaki etkinlikler saat kapatır)</span></legend>
+            {cals.filter((x) => x.id !== google.calendarId).map((x) => (
+              <label class="check-inline">
+                <input type="checkbox" name="dolu" value={x.id} checked={google.busy.includes(x.id)} /> {x.summary}
+                {x.id !== x.summary ? <span class="opt"> · {x.id}</span> : null}
+              </label>
+            ))}
+            {manual.map((id) => (
+              <label class="check-inline"><input type="checkbox" name="dolu" value={id} checked /> {id}</label>
+            ))}
+          </fieldset>
+          <label for="g-ek">Listede olmayan takvim <span class="opt">(boş/dolu bilgisini paylaşan kişinin e-posta adresi)</span></label>
+          <input id="g-ek" name="ek" type="email" />
+          <button class="btn btn-small" type="submit">Kaydet</button>
+        </form>
+      )}
+      <form class="msg-retry" method="post" action="/admin/google/kes">
+        <label class="check-inline"><input type="checkbox" name="onay" required /> Eminim</label>
+        <button class="btn-ghost btn-small" type="submit">Bağlantıyı kes</button>
+      </form>
+    </section>
+  );
+}
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const int = (v: unknown, lo: number, hi: number) => {

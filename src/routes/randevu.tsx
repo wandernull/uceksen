@@ -3,7 +3,7 @@ import { csrf } from "hono/csrf";
 import { DateTime } from "luxon";
 import type { AppEnv } from "../env";
 import {
-  availableSlots, bookSlot, cancelBooking, CONSULT, fulfillConsult, isLive, loadIntent, policy, rescheduleBooking,
+  bookSlot, cancelBooking, CONSULT, fulfillConsult, isLive, loadIntent, offeredSlots, policy, rescheduleBooking,
   type Booking, type Intent,
 } from "../lib/booking";
 import { buildIcs } from "../lib/ics";
@@ -69,7 +69,7 @@ function TzForm({ tz, action }: { tz: string; action: string }) {
   );
 }
 
-function SlotPicker({ slots, tz, action, button, error, extra }: { slots: Slot[]; tz: string; action: string; button: string; error?: string; extra?: unknown }) {
+function SlotPicker({ slots, tz, action, button, error, extra, problem }: { slots: Slot[]; tz: string; action: string; button: string; error?: string; extra?: unknown; problem?: boolean }) {
   const days = new Map<string, Slot[]>();
   for (const s of slots) {
     const key = DateTime.fromISO(s.start, { zone: "utc" }).setZone(tz).toISODate()!;
@@ -81,6 +81,14 @@ function SlotPicker({ slots, tz, action, button, error, extra }: { slots: Slot[]
     const d = DateTime.fromISO(day, { zone: tz });
     const k = `${d.weekYear}-${d.weekNumber}`;
     weeks.set(k, [...(weeks.get(k) ?? []), [day, list]]);
+  }
+  if (problem) {
+    return (
+      <>
+        {error && <p class="form-error" role="alert">{error}</p>}
+        <p class="note" role="status">Takvimi şu an kontrol edemiyoruz. Birkaç dakika sonra sayfayı yenile; sorun sürerse bu konuşmadan bize yaz.</p>
+      </>
+    );
   }
   if (!slots.length) {
     return <p class="note">Şu an seçilebilecek boş saat yok. Takvimi sık güncelliyoruz; birkaç gün sonra tekrar bak ya da bu konuşmadan bize yaz.</p>;
@@ -164,7 +172,7 @@ randevu.get("/odeme/tamam", async (c) => {
 // --- Pick a time ----------------------------------------------------------------------------------
 
 async function pickPage(env: Env, intent: Intent, tz: string, error?: string) {
-  const slots = await availableSlots(env.DB);
+  const { slots, problem } = await offeredSlots(env);
   return html(
     <SiteLayout title="Görüşme saatini seç — Üç Eksen" noindex>
       <header>
@@ -174,7 +182,7 @@ async function pickPage(env: Env, intent: Intent, tz: string, error?: string) {
       </header>
       <section>
         <TzForm tz={tz} action={`/randevu/${intent.token}`} />
-        <SlotPicker slots={slots} tz={tz} action={`/randevu/${intent.token}`} button="Bu saati seç" error={error} />
+        <SlotPicker slots={slots} tz={tz} action={`/randevu/${intent.token}`} button="Bu saati seç" error={error} problem={!!problem} />
       </section>
       <script src="/randevu.js" defer></script>
     </SiteLayout>,
@@ -211,6 +219,7 @@ function bookedPage(intent: Intent, b: Booking, tz: string, flash?: string) {
 const PICK_ERRORS = {
   taken: "Bu saat az önce doldu. Başka bir saat seç.",
   unavailable: "Bu saat artık seçilemiyor. Güncel saatler aşağıda.",
+  calendar: "Takvimi şu an kontrol edemiyoruz; saat kaydedilmedi. Birkaç dakika sonra tekrar dene.",
 } as const;
 
 randevu.get(`/randevu/:token${TOKEN}`, async (c) => {
@@ -265,7 +274,8 @@ randevu.get(`/randevu/:token${TOKEN}/takvim.ics`, async (c) => {
 
 async function changePage(env: Env, intent: Intent, b: Booking, tz: string, error?: string) {
   const p = policy(b);
-  const slots = p.canReschedule ? (await availableSlots(env.DB, b.id)).filter((s) => s.start !== b.start_utc) : [];
+  const offered = p.canReschedule ? await offeredSlots(env, b.id) : { slots: [], problem: null };
+  const slots = offered.slots.filter((s) => s.start !== b.start_utc);
   const left = CONSULT.maxReschedules - b.reschedule_count;
   return html(
     <SiteLayout title="Görüşmeyi değiştir — Üç Eksen" noindex>
@@ -285,7 +295,7 @@ async function changePage(env: Env, intent: Intent, b: Booking, tz: string, erro
             <p class="small">Görüşmeye {CONSULT.rescheduleHours} saatten fazla varken yapılabilir. {left} değişiklik hakkın kaldı.</p>
             <TzForm tz={tz} action={`/randevu/${intent.token}/degistir`} />
             <SlotPicker slots={slots} tz={tz} action={`/randevu/${intent.token}/degistir`} button="Yeni saati kaydet"
-              extra={<input type="hidden" name="islem" value="ertele" />} />
+              extra={<input type="hidden" name="islem" value="ertele" />} problem={!!offered.problem} />
           </>
         ) : (
           <p class="small">
@@ -341,7 +351,7 @@ randevu.post(`/randevu/:token${TOKEN}/degistir`, async (c) => {
   const start = typeof form.start === "string" ? form.start : "";
   const r = await rescheduleBooking(c.env, intent, booking, start, tz);
   if (r.ok) return c.redirect(`/randevu/${intent.token}?degisti=1`, 303);
-  const msg = r.reason === "not_allowed" ? "Saat artık değiştirilemiyor." : r.reason === "taken" ? PICK_ERRORS.taken : PICK_ERRORS.unavailable;
+  const msg = r.reason === "not_allowed" ? "Saat artık değiştirilemiyor." : PICK_ERRORS[r.reason];
   const fresh = (await loadIntent(c.env.DB, intent.token))!.booking!;
   return c.html(await changePage(c.env, intent, fresh, tz, msg), 409);
 });

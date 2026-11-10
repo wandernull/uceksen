@@ -86,3 +86,8 @@
 .row-inline form { margin: 0; }
 .slot-preview { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; font-family: var(--mono); font-size: .8rem; }
 .slot-preview li { border: 1px solid var(--rule); padding: .3rem .55rem; }
+
+/* Google calendar choices: one checkbox per line; long calendar ids wrap. */
+.check-list { border: 0; margin: 0; padding: 0; display: grid; gap: .45rem; min-width: 0; }
+.check-list legend { padding: 0; margin-bottom: .35rem; }
+.check-list .check-inline { display: flex; align-items: baseline; flex-wrap: wrap; overflow-wrap: anywhere; min-width: 0; }

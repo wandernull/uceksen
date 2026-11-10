@@ -3,7 +3,7 @@ import { csrf } from "hono/csrf";
 import type { AppEnv } from "../../env";
 import { requireAdmin } from "../../lib/admin-auth";
 import { attachmentsFor, formatSize, serveAttachment } from "../../lib/attachments";
-import { cancelBooking, loadIntent, offerConsult, paymentUrl } from "../../lib/booking";
+import { cancelBooking, loadIntent, offerConsult, paymentUrl, retryGoogle } from "../../lib/booking";
 import { conversationUrl, deliverMessage, sendOutgoing } from "../../lib/conversations";
 import { formatEur } from "../../lib/guide";
 import { formatSlot } from "../../lib/slots";
@@ -222,12 +222,14 @@ type ConsultRow = {
   intent_id: number; token: string; created_at: string; amount_cents: number | null; currency: string | null; invoice_url: string | null;
   expires_at: string; booking_id: number | null; start_utc: string | null; customer_tz: string | null; state: string | null;
   reschedule_count: number | null; refund_status: string | null; cancelled_by: string | null;
+  meet_url: string | null; gcal_status: string | null; gcal_error: string | null;
 };
 
 async function consultFor(db: D1Database, convId: number) {
   return (await db.prepare(
     `SELECT i.id AS intent_id, i.token, i.created_at, i.amount_cents, i.currency, i.invoice_url, i.expires_at,
-            b.id AS booking_id, b.start_utc, b.customer_tz, b.state, b.reschedule_count, b.refund_status, b.cancelled_by
+            b.id AS booking_id, b.start_utc, b.customer_tz, b.state, b.reschedule_count, b.refund_status, b.cancelled_by,
+            b.meet_url, b.gcal_status, b.gcal_error
        FROM booking_intents i LEFT JOIN bookings b ON b.booking_intent_id = i.id
       WHERE i.conversation_id = ?1 ORDER BY i.id`,
   ).bind(convId).all<ConsultRow>()).results;
@@ -238,6 +240,26 @@ const BOOKING_STATE: Record<string, string> = {
 };
 const REFUND: Record<string, string> = { refunded: "iade edildi", not_eligible: "iade yok", failed: "İADE BAŞARISIZ — Stripe'tan elle yap" };
 
+function GoogleFacts({ r }: { r: ConsultRow }) {
+  const live = r.state === "confirmed" || r.state === "rescheduled";
+  const retry = (label: string) => (
+    <form class="msg-retry" method="post" action={`/admin/randevu/${r.booking_id}/google`}>
+      {r.gcal_status === "failed" && <span class="msg-warn">Google'a yazılamadı{r.gcal_error ? `: ${r.gcal_error}` : ""}</span>}
+      <button class="btn-ghost btn-small" type="submit">{label}</button>
+    </form>
+  );
+  return (
+    <>
+      <dt>Meet</dt>
+      <dd>
+        {r.meet_url ? <a href={r.meet_url} rel="noreferrer">{r.meet_url}</a> : "—"}
+        {live && r.gcal_status !== "synced" && retry(r.gcal_status === "failed" ? "Tekrar dene" : "Google'a yaz")}
+        {!live && r.gcal_status === "failed" && retry("Google'dan silmeyi tekrar dene")}
+      </dd>
+    </>
+  );
+}
+
 function ConsultSection({ env, conv, consult, tz, signer, flash }: { env: Env; conv: Conv; consult: ConsultRow[]; tz: string; signer: string; flash?: string }) {
   const payUrl = paymentUrl(env, conv.reply_token);
   return (
@@ -246,6 +268,8 @@ function ConsultSection({ env, conv, consult, tz, signer, flash }: { env: Env; c
       {flash === "1" && <p class="note" role="status">Ödeme bağlantısı gönderildi.</p>}
       {flash === "0" && <p class="form-error" role="alert">Mesaj kaydedildi ama gönderilemedi. Aşağıdan tekrar gönderebilirsin.</p>}
       {flash === "iptal" && <p class="note" role="status">Randevu iptal edildi.</p>}
+      {flash === "google" && <p class="note" role="status">Google Takvim güncellendi.</p>}
+      {flash === "googlehata" && <p class="form-error" role="alert">Google Takvim'e yine yazılamadı. Takvim sayfasında bağlantıyı kontrol et.</p>}
       {consult.map((r) => (
         <dl class="facts">
           <dt>Ödeme</dt>
@@ -266,6 +290,7 @@ function ConsultSection({ env, conv, consult, tz, signer, flash }: { env: Env; c
               `Henüz saat seçilmedi (bağlantı ${formatTr(r.expires_at, tz)} tarihine kadar geçerli)`
             )}
           </dd>
+          {r.booking_id && <GoogleFacts r={r} />}
           <dt>Müşteri sayfası</dt>
           <dd><a href={`${env.APP_URL}/randevu/${r.token}`} rel="noreferrer">{`${env.APP_URL}/randevu/${r.token}`}</a></dd>
           {r.booking_id && (r.state === "confirmed" || r.state === "rescheduled") && (
@@ -318,6 +343,15 @@ admin.post("/randevu/:id{[0-9]+}/iptal", async (c) => {
   const r = await cancelBooking(c.env, found.intent, found.booking, "admin", c.get("admin").author);
   if (!r.ok) return c.text("Bu randevu iptal edilemiyor (geçmişte ya da zaten iptal).", 409);
   return c.redirect(`/admin/konusma/${found.intent.conversation_id}?odeme=iptal#danismanlik`, 303);
+});
+
+admin.post("/randevu/:id{[0-9]+}/google", async (c) => {
+  const id = Number(c.req.param("id"));
+  const conv = await c.env.DB.prepare("SELECT conversation_id FROM bookings WHERE id = ?1").bind(id).first<{ conversation_id: number }>();
+  if (!conv) return c.text("Randevu bulunamadı.", 404);
+  const g = await retryGoogle(c.env, id);
+  const flash = g?.status === "synced" ? "google" : "googlehata";
+  return c.redirect(`/admin/konusma/${conv.conversation_id}?odeme=${flash}#danismanlik`, 303);
 });
 
 admin.post("/konusma/:id{[0-9]+}/durum", async (c) => {
