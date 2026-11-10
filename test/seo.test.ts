@@ -67,7 +67,10 @@ describe("search engines and AI agents", () => {
       expect(res.status, path).toBe(200);
       expect(res.headers.get("content-type"), path).toContain(type!);
     }
-    const llms = await (await get("/llms.txt")).text();
+    const res = await get("/llms.txt");
+    expect(res.headers.get("content-type")).toMatch(/text\/plain; charset=utf-8/i);
+    const llms = await res.text();
+    expect(llms).toContain("Avrupa’ya açılan Türkler için Türkçe bir kaynak");
     expect(llms.startsWith("# Üç Eksen\n")).toBe(true);
     for (const p of ["/rehber", "/danismanlik"]) expect(llms).toContain(`](${SITE_URL}${p})`);
     expect(llms).toContain("€15");

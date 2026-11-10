@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import llms from "../content/llms.txt";
 import { isProduction, type AppEnv } from "../env";
 
 /** The one indexable address. Static pages carry it in their canonical/OG tags too. */
@@ -28,3 +29,7 @@ seo.get("/sitemap.xml", (c) => {
     "Cache-Control": "public, max-age=3600",
   });
 });
+
+// Served by the Worker, not as a static asset: static .txt goes out without a charset and
+// browsers then read the Turkish text as Windows-1252.
+seo.get("/llms.txt", (c) => c.text(llms, 200, { "Cache-Control": "public, max-age=3600" }));
