@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-11-11
 **Active phase:** Phase 6 — Google Calendar
-**Status:** ⏸ built, tested and deployed to staging — waiting for the user to connect Google from `/admin/takvim` (SPEC §11 step 4), then a live test
+**Status:** Phase 6 done — Google connected on staging (`bbartu.demirci@gmail.com`), end-to-end test passed 2026-11-11. Next: Phase 7.
 
 ---
 
@@ -19,7 +19,7 @@
 | 3 | Email | ✅ | `99a3b9d` |
 | 4 | Guide sales | ✅ | `3ecf790`, `a6c96d5`, `b6f0e4b` (₺ font) |
 | 5 | Booking (without Google) | ✅ | see `git log --grep 'phase 5'` |
-| 6 | Google Calendar | ⏸ | not committed yet (deployed to staging manually) |
+| 6 | Google Calendar | ✅ | `92ebc3c` (live test on staging passed 2026-11-11) |
 | 7 | Intake, reminders, summary | ⬜ | — |
 | 8 | Cleanup and resilience | ⬜ | — |
 | 9 | Go live | ⬜ | — |
