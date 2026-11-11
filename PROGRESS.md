@@ -3,7 +3,7 @@
 > Maintained by the agent. First action of every session: read this file. Update it at the end of every phase.
 > When the user returns after a break, this file tells them where things stand.
 
-**Last updated:** 2026-11-10
+**Last updated:** 2026-11-11
 **Active phase:** Phase 6 — Google Calendar
 **Status:** ⏸ built, tested and deployed to staging — waiting for the user to connect Google from `/admin/takvim` (SPEC §11 step 4), then a live test
 
@@ -34,7 +34,12 @@ Phase 6 (Google Calendar). Code done: OAuth from `/admin/takvim`, encrypted refr
 
 ## Blocked on user
 
-**Phase 6, SPEC §11 step 4:** open `https://uceksen.gizemderinkok.workers.dev/admin/takvim` → "Google Takvim" → **Google'a bağlan** → sign in as `gizemderinkok@gmail.com` → "Google hasn't verified this app" → Advanced → Go to Üç Eksen → leave all boxes ticked → Continue. Back on the page: check that the booking calendar is "Üç Eksen" and the busy calendars include Gizem's main calendar and Baran's shared one.
+**Staging moved to `https://staging.uceksen.com` (2026-11-11).** Google will be connected with Baran's `bbartu.demirci@gmail.com` for testing so work can go on in parallel; Gizem's account is connected at the production switch. User steps:
+1. **Access:** Zero Trust → Access controls → Applications → `uceksen` → Destinations → + Add public hostname: subdomain `staging`, domain `uceksen.com`, path `admin`. (Same app ⇒ same AUD; no config change.) Until then `/admin/` on staging returns 403 (fails closed).
+2. **Google client `uceksen-web`:** add redirect URI `https://staging.uceksen.com/admin/google/callback`.
+3. In `bbartu.demirci@gmail.com`, create a calendar named **Üç Eksen** (events go there; without it the connect step picks no booking calendar).
+4. `https://staging.uceksen.com/admin/takvim` → **Google'a bağlan** → sign in as `bbartu.demirci@gmail.com` → Advanced → Go to Üç Eksen → Continue. The hint now pre-selects the signed-in admin's own address.
+5. Live test (temporary hours → sandbox payment → book → event + Meet link → reschedule → cancel).
 
 Google preparation (done 2026-11-10): GCP project `uceksen` under `baran@botelabs.io`, Calendar API on, consent screen External + **In production** (unverified; fine for one user), scopes `calendar.events`, `calendar.freebusy`, `calendar.calendarlist.readonly`, no logo (a logo forces verification). Authorized domains `uceksen.com` + `gizemderinkok.workers.dev`; homepage/privacy/terms links point at `uceksen.com`. Web client `uceksen-web` with redirect URIs for workers.dev, `uceksen.com` and `localhost:8787` (`/admin/google/callback`). Client id/secret in `~/.gizem-creds` (`GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`) → `.dev.vars` + Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; `ENCRYPTION_KEY` generated separately for local and the Worker. "Üç Eksen" calendar created; Baran's calendar shared free/busy with Gizem.
 
@@ -208,22 +213,40 @@ Not blocking, for later:
 
 - **2026-11-10 — Consultation €100 (was €200); launch prices, no strikethrough.** User asked for crossed-out "was" prices (~~€30~~ €15, ~~€200~~ €100). Not done: under the EU Price Indication Directive art. 6a (Omnibus, ACM in NL) a crossed-out price must be the lowest price actually charged in the previous 30 days, and neither was ever charged. Instead (user's choice): "Lansman fiyatı. 1 Şubat 2027'den itibaren €30 / €200" under the price on `/rehber`, `/danismanlik`, the payment page and the terms. The home page shows no prices. Sandbox consult price now `price_1UaLI4JguQXFmVyOT5C8HrYe` (€100, inclusive); the €200 price is archived.
 
+- **2026-11-11 — Staging on `staging.uceksen.com` (user request).** Worker custom domain instead of workers.dev, so testing uses the real zone; workers.dev kept on as a fallback until go-live. Still one deployment: going live is config (`APP_URL`, `ENVIRONMENT`, routes) plus Access/webhooks, not a new Worker. Google connected with Baran's account on staging so testing doesn't wait on Gizem; swapped at go-live. The Google connect hint is now the signed-in admin's own address (was always Gizem's).
 - **2026-11-10 — SEO / AI-agent pass (pulled forward from Phase 8's robots/sitemap).** Every public page: Turkish meta description, canonical + Open Graph/X tags pointing at `https://uceksen.com` (never workers.dev), JSON-LD (Organization with legal name/VAT, WebSite; Product+Offer €15 on `/rehber`, Service+Offer €100 on `/danismanlik`, VAT included, `priceValidUntil` 2027-01-31). New titles for `/`, `/rehber`, `/danismanlik` (h1s unchanged). `robots.txt`/`sitemap.xml` from the Worker: outside production `Disallow: /` (staging must not be indexed); production hides token/admin paths, names the sitemap, AI crawlers allowed. `llms.txt` (Turkish summary, products, prices; `src/content/llms.txt`, served by the Worker with `charset=utf-8` — as a static asset it went out without a charset and showed mojibake). Share image `og.png` + favicon/app icons rendered by `scripts/render-brand.mjs` from the site fonts and colours.
+
+## Switching staging → production
+
+There is one Worker. "Production" = the same deployment with different config. Steps, in order:
+1. Prerequisites: Stripe live account activated, live products/prices, restricted live key, live webhook (see the Stripe go-live note under Known issues).
+2. `wrangler.toml`:
+   - `routes`: add `{ pattern = "uceksen.com", custom_domain = true }` (and `www.uceksen.com` if wanted). Keep `staging.uceksen.com` for a while: it then serves production too, so old test links still work; remove it later.
+   - `workers_dev = false`.
+   - `ENVIRONMENT = "production"` (turns off the DEV_EMAIL guard, robots.txt allows indexing).
+   - `APP_URL = "https://uceksen.com"` (all email links, Stripe return URLs, Google redirect follow from it).
+   - Live price ids in `STRIPE_PRICE_GUIDE` / `STRIPE_PRICE_CONSULT`.
+3. Secrets (user): `STRIPE_SECRET_KEY` (live, restricted), `STRIPE_WEBHOOK_SECRET` (live endpoint). Others stay.
+4. DNS: nothing by hand — custom domains create the record and certificate. `uceksen.com` currently has only MX/TXT records (mail), which stay.
+5. Access: add hostname `uceksen.com`, path `admin` to the `uceksen` app.
+6. Webhooks: Resend webhook `2f6b919a-…` → `https://uceksen.com/api/webhooks/resend`; Stripe live endpoint → `https://uceksen.com/api/webhooks/stripe`.
+7. Google: redirect URI `https://uceksen.com/admin/google/callback` is already registered. At `/admin/takvim`: **Bağlantıyı kes** (Baran's test account) → Gizem connects `gizemderinkok@gmail.com`; check booking + busy calendars.
+8. Data: clear staging test data from D1 (test conversations, bookings, purchases) before the first real customer; set real working hours; real guide PDF.
+9. Push → CI deploys. Check `/health` shows `"environment":"production"`, robots.txt, one real purchase with a small refund.
 
 ## Known issues
 
 - `GH_TOKEN` lacks the `read:org` scope; `gh auth status` warns. Harmless for this repo.
 - Admin replies can't carry attachments yet (customers can attach on `/konusma`).
-- At go-live: change the Resend webhook endpoint and `APP_URL` to the real domain (links in already-sent test emails point at workers.dev).
+- Links in test emails sent before 2026-11-11 point at workers.dev (still works while `workers_dev = true`).
 - Update emails carry the opt-out link in the body only (no `List-Unsubscribe` header yet).
 - `max_per_week` is checked when slots are listed, not inside the booking statement: two people booking the last two free places of a week at the same moment could exceed it by one. Same-slot double booking is impossible.
 - The customer joins Meet without being invited, so Gizem has to admit them ("ask to join"). Intentional: inviting would make Google email the customer.
-- At go-live: `APP_URL` → `https://uceksen.com` makes the OAuth redirect `https://uceksen.com/admin/google/callback` (already registered in the Google client). Google stays connected (token is in D1).
 - Intake form link in the confirmation email comes with Phase 7.
 - **Go-live (Phase 9), Stripe — sandbox settings do not carry over to live:** activate the live account (KYC, bank), public details (incl. terms-of-service URL, support email), branding (icon, logo, colours), Stripe Tax (head office, inclusive default, NL registration), create both products/prices and put the live price ids in `wrangler.toml`, live webhook endpoint for `https://uceksen.com/api/webhooks/stripe` (same two events) → `STRIPE_WEBHOOK_SECRET`, restricted live key → `STRIPE_SECRET_KEY` (user installs both). Decide whether Stripe also emails its own receipt/invoice (our delivery email already links the invoice).
 - **1 February 2027: the launch prices end — also update the JSON-LD offers (`priceValidUntil`, prices) and `src/content/llms.txt`.**
 - **1 February 2027: the launch prices end — raise them for real** (new live Stripe prices €30 / €200 → `wrangler.toml`; remove the "Lansman fiyatı" notes; terms page). Announcing a future price and not applying it is misleading under consumer law. Moving the date is fine, but do it before it passes.
-- Share previews (`og:image`) and canonicals point at `uceksen.com`, which doesn't resolve until go-live: link previews show no image before then. At go-live also set `workers_dev = false` (or redirect it) so staging can't compete with the real domain; robots.txt switches to "allow" with `ENVIRONMENT=production`. Cloudflare's managed robots.txt (content signals) is prepended by Cloudflare — check the zone's AI-crawler settings then.
+- Share previews (`og:image`) and canonicals point at `uceksen.com`, which doesn't resolve until go-live: link previews show no image before then. At go-live robots.txt switches to "allow" with `ENVIRONMENT=production`. Cloudflare's managed robots.txt (content signals) is prepended by Cloudflare — check the zone's AI-crawler settings then.
 - `test:layout` runs locally only (needs Chrome + running dev server); not in CI.
 
 ## Open questions
@@ -232,4 +255,4 @@ Not blocking, for later:
 
 ## Next step
 
-User connects Google from `/admin/takvim` → live test on staging → commit `phase 6` → approval → Phase 7 (intake, reminders, summary).
+User finishes the staging steps above (Access hostname, Google redirect URI, connect `bbartu.demirci@gmail.com`) → live test on staging → commit `phase 6` → approval → Phase 7 (intake, reminders, summary).

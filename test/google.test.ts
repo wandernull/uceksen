@@ -101,7 +101,7 @@ describe("refresh token encryption", () => {
 });
 
 describe("connecting Google", () => {
-  it("sends the admin to Google with offline access, all scopes, PKCE and Gizem as the hint", async () => {
+  it("sends the admin to Google with offline access, all scopes, PKCE and the signed-in admin as the hint", async () => {
     const res = await form("/admin/google/baglan", {});
     expect(res.status).toBe(303);
     const url = new URL(res.headers.get("location")!);

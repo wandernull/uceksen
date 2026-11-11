@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 import type { AppEnv } from "../../env";
 import { requireAdmin } from "../../lib/admin-auth";
-import { parseAdmins } from "../../lib/admins";
 import { authUrl, disconnect, finishAuth, getGoogleSettings, isWritable, listCalendars, saveCalendarChoices } from "../../lib/google";
 
 /** /admin/google: connect Gizem's Google account (OAuth), choose calendars, disconnect. */
@@ -13,9 +12,8 @@ adminGoogle.use("*", csrf());
 const back = (k: string) => `/admin/takvim?google=${k}#google`;
 
 adminGoogle.post("/baglan", async (c) => {
-  // Hint Google towards Gizem's account: the calendar and the Meet links are hers.
-  const hint = parseAdmins(c.env.ADMIN_EMAILS).find((a) => a.author === "gizem")?.email;
-  return c.redirect(await authUrl(c.env, c.get("admin").email, hint), 303);
+  // Hint Google towards the account of the admin who clicked; the chooser still allows another.
+  return c.redirect(await authUrl(c.env, c.get("admin").email, c.get("admin").email), 303);
 });
 
 adminGoogle.get("/callback", async (c) => {

@@ -3,7 +3,14 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 account_id = "ef35eded2f130806ec2824e2920866ee"
+# Staging lives on staging.uceksen.com (Worker custom domain; Cloudflare creates the DNS
+# record and certificate). workers.dev stays on as a fallback until go-live.
+# GO-LIVE: see "Switching staging → production" in PROGRESS.md — add uceksen.com here,
+# set workers_dev = false, flip ENVIRONMENT and APP_URL below.
 workers_dev = true
+routes = [
+  { pattern = "staging.uceksen.com", custom_domain = true },
+]
 
 # Static pages from public/. Matching files are served directly; everything else
 # (APIs, dynamic pages) falls through to the Worker. /rehber serves rehber.html,
@@ -16,9 +23,10 @@ not_found_handling = "none"
 
 # Single deployment. ENVIRONMENT stays "staging" until go-live (Phase 9) so the
 # DEV_EMAIL guard is active. Locally, .dev.vars overrides it to "local".
+# Every absolute link (emails, Stripe return URLs, Google OAuth redirect) comes from APP_URL.
 [vars]
 ENVIRONMENT = "staging"
-APP_URL = "https://uceksen.gizemderinkok.workers.dev"
+APP_URL = "https://staging.uceksen.com"
 # Cloudflare Access (Zero Trust) for /admin. Empty = /admin refuses everyone on
 # the deployed Worker. Filled in once the Access application exists.
 ACCESS_TEAM_DOMAIN = "twilight-surf-1e57.cloudflareaccess.com"
