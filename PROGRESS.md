@@ -213,7 +213,7 @@ Not blocking, for later:
 
 - **2026-11-10 — Consultation €100 (was €200); launch prices, no strikethrough.** User asked for crossed-out "was" prices (~~€30~~ €15, ~~€200~~ €100). Not done: under the EU Price Indication Directive art. 6a (Omnibus, ACM in NL) a crossed-out price must be the lowest price actually charged in the previous 30 days, and neither was ever charged. Instead (user's choice): "Lansman fiyatı. 1 Şubat 2027'den itibaren €30 / €200" under the price on `/rehber`, `/danismanlik`, the payment page and the terms. The home page shows no prices. Sandbox consult price now `price_1UaLI4JguQXFmVyOT5C8HrYe` (€100, inclusive); the €200 price is archived.
 
-- **2026-11-12 — DEV_EMAIL guard temporarily off on staging (user decision, overriding CLAUDE.md).** `MAIL_GUARD = "off"` in `wrangler.toml`; honoured only for exactly `ENVIRONMENT=staging`. Staging emails now go to the real recipients, so any address typed into a form or used in a test purchase gets real mail. Restore: delete the line and push.
+- **2026-11-12 — DEV_EMAIL guard temporarily off on staging (user decision, overriding CLAUDE.md).** `MAIL_GUARD = "off"` in `wrangler.toml`; honoured only for exactly `ENVIRONMENT=staging`. Staging emails now go to the real recipients, so any address typed into a form or used in a test purchase gets real mail. Restore: delete the line and push. **Restored the same day** (`MAIL_GUARD = "on"`); the switch stays for future use.
 - **2026-11-11 — Staging on `staging.uceksen.com` (user request).** Worker custom domain instead of workers.dev, so testing uses the real zone; workers.dev kept on as a fallback until go-live. Still one deployment: going live is config (`APP_URL`, `ENVIRONMENT`, routes) plus Access/webhooks, not a new Worker. Google connected with Baran's account on staging so testing doesn't wait on Gizem; swapped at go-live. The Google connect hint is now the signed-in admin's own address (was always Gizem's).
 - **2026-11-10 — SEO / AI-agent pass (pulled forward from Phase 8's robots/sitemap).** Every public page: Turkish meta description, canonical + Open Graph/X tags pointing at `https://uceksen.com` (never workers.dev), JSON-LD (Organization with legal name/VAT, WebSite; Product+Offer €15 on `/rehber`, Service+Offer €100 on `/danismanlik`, VAT included, `priceValidUntil` 2027-01-31). New titles for `/`, `/rehber`, `/danismanlik` (h1s unchanged). `robots.txt`/`sitemap.xml` from the Worker: outside production `Disallow: /` (staging must not be indexed); production hides token/admin paths, names the sitemap, AI crawlers allowed. `llms.txt` (Turkish summary, products, prices; `src/content/llms.txt`, served by the Worker with `charset=utf-8` — as a static asset it went out without a charset and showed mojibake). Share image `og.png` + favicon/app icons rendered by `scripts/render-brand.mjs` from the site fonts and colours.
 
@@ -224,7 +224,6 @@ There is one Worker. "Production" = the same deployment with different config. S
 2. `wrangler.toml`:
    - `routes`: add `{ pattern = "uceksen.com", custom_domain = true }` (and `www.uceksen.com` if wanted). Keep `staging.uceksen.com` for a while: it then serves production too, so old test links still work; remove it later.
    - `workers_dev = false`.
-   - Remove `MAIL_GUARD` (production ignores it anyway, but it must not linger).
    - `ENVIRONMENT = "production"` (turns off the DEV_EMAIL guard, robots.txt allows indexing).
    - `APP_URL = "https://uceksen.com"` (all email links, Stripe return URLs, Google redirect follow from it).
    - Live price ids in `STRIPE_PRICE_GUIDE` / `STRIPE_PRICE_CONSULT`.
@@ -238,7 +237,6 @@ There is one Worker. "Production" = the same deployment with different config. S
 
 ## Known issues
 
-- **DEV_EMAIL guard is OFF on staging** (`MAIL_GUARD = "off"`, 2026-11-12). Restore before go-live / when testing with real people is done.
 
 - `GH_TOKEN` lacks the `read:org` scope; `gh auth status` warns. Harmless for this repo.
 - Admin replies can't carry attachments yet (customers can attach on `/konusma`).
