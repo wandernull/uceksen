@@ -20,11 +20,21 @@ describe("DEV_EMAIL guard", () => {
     expect(applyDevGuard({ ENVIRONMENT: "production", DEV_EMAIL: "dev@example.com" }, mail)).toEqual(mail);
   });
 
+  it("MAIL_GUARD=off sends to the real recipients on staging only", () => {
+    expect(applyDevGuard({ ENVIRONMENT: "staging", DEV_EMAIL: "dev@example.com", MAIL_GUARD: "off" }, mail)).toEqual(mail);
+    for (const ENVIRONMENT of ["local", "test", "Staging", "", "prod"]) {
+      expect(applyDevGuard({ ENVIRONMENT, DEV_EMAIL: "dev@example.com", MAIL_GUARD: "off" }, mail).to).toEqual(["dev@example.com"]);
+    }
+    for (const MAIL_GUARD of ["on", "OFF", "", undefined]) {
+      expect(applyDevGuard({ ENVIRONMENT: "staging", DEV_EMAIL: "dev@example.com", MAIL_GUARD }, mail).to).toEqual(["dev@example.com"]);
+    }
+  });
+
   it("refuses to send at all outside production when DEV_EMAIL is missing", async () => {
     fake.reset();
     for (const DEV_EMAIL of [undefined, "", "   "]) {
       expect(() => applyDevGuard({ ENVIRONMENT: "staging", DEV_EMAIL } as Env, mail)).toThrow(MailGuardError);
-      await expect(sendMail({ ...env, ENVIRONMENT: "staging", DEV_EMAIL } as Env, mail)).rejects.toThrow(MailGuardError);
+      await expect(sendMail({ ...env, ENVIRONMENT: "staging", MAIL_GUARD: "on", DEV_EMAIL } as Env, mail)).rejects.toThrow(MailGuardError);
     }
     expect(fake.sent).toHaveLength(0);
   });

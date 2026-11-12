@@ -31,10 +31,17 @@ export class MailGuardError extends Error {}
 /**
  * Outside production every email goes to DEV_EMAIL, whatever the intended
  * recipient. The intended recipients are written at the top of the body.
- * Never bypass this. Without DEV_EMAIL nothing is sent at all.
+ * Without DEV_EMAIL nothing is sent at all.
+ *
+ * TEMPORARY (user decision 2026-11-12): MAIL_GUARD = "off" lets staging send to the
+ * real recipients. Honoured only for exactly ENVIRONMENT=staging, never locally or in tests.
  */
-export function applyDevGuard(env: Pick<Env, "ENVIRONMENT" | "DEV_EMAIL">, mail: OutMail): OutMail {
-  if (isProduction(env)) return mail;
+export function guardOff(env: Pick<Env, "ENVIRONMENT"> & { MAIL_GUARD?: string }): boolean {
+  return env.ENVIRONMENT === "staging" && env.MAIL_GUARD === "off";
+}
+
+export function applyDevGuard(env: Pick<Env, "ENVIRONMENT" | "DEV_EMAIL"> & { MAIL_GUARD?: string }, mail: OutMail): OutMail {
+  if (isProduction(env) || guardOff(env)) return mail;
   const dev = env.DEV_EMAIL?.trim();
   if (!dev) throw new MailGuardError("DEV_EMAIL is not set; refusing to send outside production");
   return {
@@ -56,7 +63,7 @@ async function call<T>(env: Pick<Env, "RESEND_API_KEY">, path: string, init: Req
 
 /** Sends through Resend (after the dev guard). Returns Resend's email id. */
 export async function sendMail(
-  env: Pick<Env, "ENVIRONMENT" | "DEV_EMAIL" | "RESEND_API_KEY" | "MAIL_FROM">,
+  env: Pick<Env, "ENVIRONMENT" | "DEV_EMAIL" | "RESEND_API_KEY" | "MAIL_FROM"> & { MAIL_GUARD?: string },
   mail: OutMail,
 ): Promise<{ id: string }> {
   const m = applyDevGuard(env, mail);

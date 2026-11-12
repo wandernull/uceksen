@@ -27,6 +27,10 @@ not_found_handling = "none"
 [vars]
 ENVIRONMENT = "staging"
 APP_URL = "https://staging.uceksen.com"
+# TEMPORARY (user decision 2026-11-12): "off" = staging emails go to the real recipients
+# instead of DEV_EMAIL. Only honoured when ENVIRONMENT = "staging". Delete this line
+# (or set "on") to restore the guard.
+MAIL_GUARD = "off"
 # Cloudflare Access (Zero Trust) for /admin. Empty = /admin refuses everyone on
 # the deployed Worker. Filled in once the Access application exists.
 ACCESS_TEAM_DOMAIN = "twilight-surf-1e57.cloudflareaccess.com"

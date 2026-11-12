@@ -64,6 +64,8 @@ Therefore: while `ENVIRONMENT !== "production"`, the recipient of **every** outg
 
 **This guard is never bypassed, never disabled, never "temporarily removed for testing".** Sending real mail to seed-data addresses is unacceptable.
 
+**Exception in force (user decision, 2026-11-12):** `MAIL_GUARD = "off"` in `wrangler.toml` turns the guard off on staging (`ENVIRONMENT = "staging"` only; local and tests are always guarded) so testers receive their own mail. Temporary. Remove the line to restore the guard; it must be gone before the user re-enables it or by go-live, whichever comes first. Do not add any other way around the guard.
+
 ## Time
 
 - All date and time handling uses **Luxon**.
