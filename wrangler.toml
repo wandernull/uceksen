@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 account_id = "ef35eded2f130806ec2824e2920866ee"
 # Staging lives on staging.uceksen.com (Worker custom domain; Cloudflare creates the DNS
 # record and certificate). workers.dev stays on as a fallback until go-live.
-# GO-LIVE: see "Switching staging → production" in PROGRESS.md — add uceksen.com here,
+# GO-LIVE: see "Phase 9 — go-live checklist" in PROGRESS.md — add uceksen.com here,
 # set workers_dev = false, flip ENVIRONMENT and APP_URL below.
 workers_dev = true
 routes = [

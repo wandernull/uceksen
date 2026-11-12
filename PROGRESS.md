@@ -217,23 +217,41 @@ Not blocking, for later:
 - **2026-11-11 — Staging on `staging.uceksen.com` (user request).** Worker custom domain instead of workers.dev, so testing uses the real zone; workers.dev kept on as a fallback until go-live. Still one deployment: going live is config (`APP_URL`, `ENVIRONMENT`, routes) plus Access/webhooks, not a new Worker. Google connected with Baran's account on staging so testing doesn't wait on Gizem; swapped at go-live. The Google connect hint is now the signed-in admin's own address (was always Gizem's).
 - **2026-11-10 — SEO / AI-agent pass (pulled forward from Phase 8's robots/sitemap).** Every public page: Turkish meta description, canonical + Open Graph/X tags pointing at `https://uceksen.com` (never workers.dev), JSON-LD (Organization with legal name/VAT, WebSite; Product+Offer €15 on `/rehber`, Service+Offer €100 on `/danismanlik`, VAT included, `priceValidUntil` 2027-01-31). New titles for `/`, `/rehber`, `/danismanlik` (h1s unchanged). `robots.txt`/`sitemap.xml` from the Worker: outside production `Disallow: /` (staging must not be indexed); production hides token/admin paths, names the sitemap, AI crawlers allowed. `llms.txt` (Turkish summary, products, prices; `src/content/llms.txt`, served by the Worker with `charset=utf-8` — as a static asset it went out without a charset and showed mojibake). Share image `og.png` + favicon/app icons rendered by `scripts/render-brand.mjs` from the site fonts and colours.
 
-## Switching staging → production
+## Phase 9 — go-live checklist (staging → production)
 
-There is one Worker. "Production" = the same deployment with different config. Steps, in order:
-1. Prerequisites: Stripe live account activated, live products/prices, restricted live key, live webhook (see the Stripe go-live note under Known issues).
-2. `wrangler.toml`:
-   - `routes`: add `{ pattern = "uceksen.com", custom_domain = true }` (and `www.uceksen.com` if wanted). Keep `staging.uceksen.com` for a while: it then serves production too, so old test links still work; remove it later.
-   - `workers_dev = false`.
-   - `ENVIRONMENT = "production"` (turns off the DEV_EMAIL guard, robots.txt allows indexing).
-   - `APP_URL = "https://uceksen.com"` (all email links, Stripe return URLs, Google redirect follow from it).
-   - Live price ids in `STRIPE_PRICE_GUIDE` / `STRIPE_PRICE_CONSULT`.
-3. Secrets (user): `STRIPE_SECRET_KEY` (live, restricted), `STRIPE_WEBHOOK_SECRET` (live endpoint). Others stay.
-4. DNS: nothing by hand — custom domains create the record and certificate. `uceksen.com` currently has only MX/TXT records (mail), which stay.
-5. Access: add hostname `uceksen.com`, path `admin` to the `uceksen` app.
-6. Webhooks: Resend webhook `2f6b919a-…` → `https://uceksen.com/api/webhooks/resend`; Stripe live endpoint → `https://uceksen.com/api/webhooks/stripe`.
-7. Google: redirect URI `https://uceksen.com/admin/google/callback` is already registered. At `/admin/takvim`: **Bağlantıyı kes** (Baran's test account) → Gizem connects `gizemderinkok@gmail.com`; check booking + busy calendars.
-8. Data: clear staging test data from D1 (test conversations, bookings, purchases) before the first real customer; set real working hours; real guide PDF.
-9. Push → CI deploys. Check `/health` shows `"environment":"production"`, robots.txt, one real purchase with a small refund.
+Written for the current setup: **one Worker**, production = same deployment with different config. If a separate production Worker is chosen instead (discussed 2026-11-12, not decided), steps B and E change: new D1/KV/R2 + migrations + all secrets set again, staging keeps its own Resend reply domain. Who: **U** = user (dashboard/accounts/money), **A** = agent.
+
+**A. Before the switch (can be done days earlier)**
+1. **U — Stripe live account** `acct_1UZRHAJ8zQ8f9hgO`: finish activation (KYC, bank account, statement descriptor "UCEKSEN").
+2. **U — Stripe live settings** (sandbox settings do not carry over): public business details (support email `merhaba@uceksen.com`, terms URL `https://uceksen.com/satis-kosullari`, privacy URL), branding (icon `public/icon-512.png`, accent `#3A5A40`), Stripe Tax (head office NL, prices **inclusive**, NL registration added), customer emails (decide: Stripe receipts on/off; our own delivery mail already links the invoice), Adaptive Pricing on/off (open question).
+3. **A (with U's go) — live products/prices**: guide €15 (tax code as in sandbox), consultation €100, both inclusive. Price ids → `wrangler.toml`.
+4. **U — restricted live key** with only: Checkout Sessions **write**, Refunds **write**, Invoices **read** (everything else none). → `wrangler secret put STRIPE_SECRET_KEY`.
+5. **U — live webhook endpoint** `https://uceksen.com/api/webhooks/stripe`, events `checkout.session.completed`, `checkout.session.async_payment_succeeded` → its signing secret → `wrangler secret put STRIPE_WEBHOOK_SECRET`. (Steps 4–5 break staging payments the moment they are set — do them in the switch window, step B.)
+6. **U — Resend plan**: free tier is 100 mails/day, 3,000/month. Check it covers expected volume (each sale/booking sends 2–4 mails incl. admin notices); upgrade if not.
+7. **U — content**: real guide PDF uploaded at `/admin/rehber` (current version, "güncel yap"); real working hours + rules at `/admin/takvim`; check privacy page lists the processors actually used (Cloudflare, Resend, Stripe, Google).
+8. **A — backup** of D1 to R2 (Phase 8 job, or a manual export) right before the switch.
+
+**B. The switch (one sitting, ~30 min)**
+1. **A — `wrangler.toml`**: `routes` add `uceksen.com` (+ `www.uceksen.com`, redirected to the apex); `workers_dev = false`; `ENVIRONMENT = "production"`; `APP_URL = "https://uceksen.com"`; live price ids. Keep `staging.uceksen.com` route for a while (old test links), remove later.
+2. **U — secrets** from A4/A5. Other secrets (`RESEND_*`, `GOOGLE_*`, `ENCRYPTION_KEY`, `ADMIN_EMAILS`, `DEV_EMAIL`) stay.
+3. **U — Access**: add hostname `uceksen.com`, path `admin` to the `uceksen` app (same AUD).
+4. **A — Resend webhook** `2f6b919a-…` → `https://uceksen.com/api/webhooks/resend`.
+5. **A — data**: delete staging test data from D1 (contacts, conversations, messages, attachments in R2, purchases, download tokens, booking intents, bookings, rate-limit keys in KV); settings row and guide versions stay.
+6. **A — push** → CI deploys. DNS: nothing by hand (custom domains create records + certificates; existing MX/TXT for mail stay).
+7. **U — Google**: `/admin/takvim` → **Bağlantıyı kes** (`bbartu.demirci@gmail.com`) → Gizem connects `gizemderinkok@gmail.com`; booking calendar "Üç Eksen", busy calendars correct. Redirect URI `https://uceksen.com/admin/google/callback` is already registered.
+
+**C. Checks right after**
+1. **A** — `/health` → `"environment":"production"`; `robots.txt` allows + sitemap; `uceksen.com/admin/` asks for Access; workers.dev no longer answers; `www` redirects.
+2. **U** — real guide purchase with own card → delivery mail + download → refund in Stripe.
+3. **U** — real consultation purchase → booking → Meet link in Gizem's calendar, customer gets `.ics`, Google sends the customer nothing → cancel (>48 h) → automatic refund arrives.
+4. **U** — contact form → admin reply → reply by email from the customer side lands in the thread.
+5. **U** — share `https://uceksen.com` in WhatsApp/X: preview image shows.
+
+**D. Later, not blocking**
+- Cloudflare zone: check AI-crawler / managed robots.txt settings, "Always use HTTPS" on.
+- Google Search Console: verify `uceksen.com`, submit `sitemap.xml`.
+- Remove workers.dev hostname from Access and old redirect URIs from the Google client.
+- 1 Feb 2027: launch prices end (see Known issues).
 
 ## Known issues
 
