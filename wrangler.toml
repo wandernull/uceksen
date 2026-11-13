@@ -74,14 +74,12 @@ enabled = true
 # ---------------------------------------------------------------- production
 [env.production]
 name = "uceksen-production"
-# GO-LIVE (Phase 9): use the routes below (www is a Cloudflare redirect rule, not a
-# route). Until then the production Worker is deployed but has no public hostname.
-#   routes = [
-#     { pattern = "uceksen.com", custom_domain = true },
-#   ]
+# Live since 2026-11-13. www is a Cloudflare redirect rule (www → apex), not a route.
 # Must stay explicit: routes are inherited otherwise, and deploying production would take
 # staging.uceksen.com away from the staging Worker.
-routes = []
+routes = [
+  { pattern = "uceksen.com", custom_domain = true },
+]
 workers_dev = false
 
 [env.production.vars]
