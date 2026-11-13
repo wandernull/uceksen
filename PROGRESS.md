@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-11-13 (live)
 **Active phase:** 9 — Go live
-**Status:** 🟢 **LIVE on https://uceksen.com since 2026-11-13** (production Worker `uceksen-production`, `main` @ `e95494e`, incl. Phase P). First live order (free, via code) delivered. Remaining post-switch steps under "Blocked on user". Next build phase: 7.
+**Status:** 🟢 **LIVE on https://uceksen.com since 2026-11-13** (production Worker `uceksen-production`, `main` @ `e95494e`, incl. Phase 11). First live order (free, via code) delivered. Remaining post-switch steps under "Blocked on user". Next build phase: 7.
 
 ---
 
@@ -34,7 +34,7 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-**Phase S — environment split** (2026-11-13), on branch `staging`:
+**Phase 10 — environment split** (2026-11-13), on branch `staging`:
 - `wrangler.toml`: top level = staging Worker `uceksen` (unchanged resources, `staging.uceksen.com`, `REPLY_LOCAL = "staging"`); `[env.production]` = Worker `uceksen-production` with its own D1 `uceksen-db-production` (`5baf8445-…`), KV `b37ebc7f…`, R2 `uceksen-files-production`, `ENVIRONMENT = "production"`, `APP_URL = https://uceksen.com`, `REPLY_LOCAL = "merhaba"`, `routes = []` (explicit: routes are inherited otherwise and production would take `staging.uceksen.com`), `workers_dev = false`. Sandbox price ids until go-live.
 - CI: push to `staging` → tests → staging migrations → deploy top level; push to `main` → same with `--env production`. GitHub environments `staging` / `production`.
 - Inbound: both environments share `reply.uceksen.com`; `isForThisEnvironment` makes staging keep only `staging[+token]@` mail and production everything else except staging's. Tests added (190 total).
@@ -42,7 +42,7 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 - **Stripe live mirrored 2026-11-13** (account `acct_1UZRHAJ8zQ8f9hgO`, via the temporary setup key `STRIPE_LIVE_SETUP_KEY_UCEKSEN`): products `prod_VcV7JXVd3LzsqI` (Rehber, `txcd_10302000`, €15 `price_1UbG6xJ8zQ8f9hgOL394U2IP`) and `prod_VcV7fPkwd1ZZhl` (Durum Analizi, `txcd_20060048`, €100 `price_1UbG6xJ8zQ8f9hgOO4vxy0kK`), both inclusive; tax settings inclusive + default `txcd_10302000`; NL registration `taxreg_1UbG6wJ8zQ8f9hgO1BsMHr39` (standard, small_seller, as sandbox); webhook `we_1UbG7FJ8zQ8f9hgOdwJp6GYq` → `https://uceksen.com/api/webhooks/stripe` (2 events), secret set as production `STRIPE_WEBHOOK_SECRET`. Live price ids in `[env.production.vars]`. Branding done by the user; Radar Lite; Stripe Tax on. Sandbox consultation description fixed (had lost its "+").
 - Note: test conversations on staging made before the split have `merhaba+…` reply addresses; replies to those now go to production's side, not staging.
 
-**Phase P — promo codes (2026-11-13, live in production via merge `e95494e`).**
+**Phase 11 — promo codes (2026-11-13, live in production via merge `e95494e`).**
 - `/admin/kodlar` ("Kodlar" in the admin nav): create a code (own or generated 8-char code; percent 1–100 or €1–200; Rehber / Durum Analizi / both; optional total use limit; optional last day, valid to the end of that day in `host_tz`), list active codes (from Stripe, `metadata.project = uceksen`), "Kapat" deactivates. Stripe holds everything: one coupon (`duration=once`, `applies_to.products`, name = "%N indirim"/"€N indirim", shown at Checkout) + one promotion code per code. Nothing in D1.
 - Conversation page: "İndirim kodu gönder" picks an active code and sends a ready Turkish email through the normal admin send (thread, signature, DEV_EMAIL guard) with the Rehber link and/or the conversation's payment link.
 - Checkout: `allow_promotion_codes` on both products. A 100% code gives a €0 order that Stripe completes with `payment_status = no_payment_required` (no payment intent): `isSettled` treats that as paid only when `amount_total = 0`, so the guide is delivered and the consultation booked. Cancelling a free booking refunds nothing (`refund_status` NULL; email: "ücretsiz olduğu için iade edilecek bir tutar yok").
@@ -242,7 +242,7 @@ Not blocking, for later:
 - **2026-11-11 — Staging on `staging.uceksen.com` (user request).** Worker custom domain instead of workers.dev, so testing uses the real zone; workers.dev kept on as a fallback until go-live. Still one deployment: going live is config (`APP_URL`, `ENVIRONMENT`, routes) plus Access/webhooks, not a new Worker. Google connected with Baran's account on staging so testing doesn't wait on Gizem; swapped at go-live. The Google connect hint is now the signed-in admin's own address (was always Gizem's).
 - **2026-11-10 — SEO / AI-agent pass (pulled forward from Phase 8's robots/sitemap).** Every public page: Turkish meta description, canonical + Open Graph/X tags pointing at `https://uceksen.com` (never workers.dev), JSON-LD (Organization with legal name/VAT, WebSite; Product+Offer €15 on `/rehber`, Service+Offer €100 on `/danismanlik`, VAT included, `priceValidUntil` 2027-01-31). New titles for `/`, `/rehber`, `/danismanlik` (h1s unchanged). `robots.txt`/`sitemap.xml` from the Worker: outside production `Disallow: /` (staging must not be indexed); production hides token/admin paths, names the sitemap, AI crawlers allowed. `llms.txt` (Turkish summary, products, prices; `src/content/llms.txt`, served by the Worker with `charset=utf-8` — as a static asset it went out without a charset and showed mojibake). Share image `og.png` + favicon/app icons rendered by `scripts/render-brand.mjs` from the site fonts and colours.
 
-## Phase 9 — go-live checklist (two Workers, from Phase S)
+## Phase 9 — go-live checklist (two Workers, from Phase 10)
 
 Production = Worker `uceksen-production` (branch `main`), already created with its own D1/KV/R2 and most secrets. Staging stays as it is. **U** = user, **A** = agent.
 
