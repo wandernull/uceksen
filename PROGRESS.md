@@ -26,7 +26,7 @@
 | 10 | Intake, reminders, summary | ⬜ | — |
 | 11 | Cleanup and resilience | ⬜ | — |
 
-**Renumbered 2026-11-13 to match the order actually done.** Old → new: S → 7, 9 → 8, P → 9, 7 → 10, 8 → 11. Commits before this use the old names (`phase S`, `phase 9`, …); SPEC §9 still uses the old numbers. After Phase 11 everything is a new feature on live.
+**Renumbered 2026-11-13 to match the order actually done.** Old → new: S → 7, 9 → 8, P → 9, 7 → 10, 8 → 11. Commits before this use the old names (`phase S`, `phase 9`, `phase P`); SPEC §9 keeps its original headings, with a note mapping them to these numbers. After Phase 11 everything is a new feature on live.
 
 Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · ✅ done
 
