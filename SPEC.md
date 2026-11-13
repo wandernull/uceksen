@@ -357,6 +357,8 @@ The design system already exists. Prototype files are in `design/`: `index.html`
 
 ## 9. Phases
 
+> **Numbering note (2026-11-13):** PROGRESS.md renumbers the phases in the order they were actually done: 7 = environment split, 8 = go live, 9 = promo codes, 10 = intake/reminders/summary (below: Phase 7), 11 = cleanup and resilience (below: Phase 8). The headings below keep the original numbers.
+
 Each phase ends in a testable state. At the end of a phase: run the tests, report, and wait for approval where required.
 
 ### Phase 0 — Skeleton

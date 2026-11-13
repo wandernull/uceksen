@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-11-13 (live)
 **Active phase:** 9 — Go live
-**Status:** 🟢 **LIVE on https://uceksen.com since 2026-11-13** (production Worker `uceksen-production`, `main` @ `e95494e`, incl. Phase 11). First live order (free, via code) delivered. Remaining post-switch steps under "Blocked on user". Next build phase: 7.
+**Status:** 🟢 **LIVE on https://uceksen.com since 2026-11-13** (production Worker `uceksen-production`, `main` @ `e95494e`, incl. Phase 9). First live order (free, via code) delivered. Remaining post-switch steps under "Blocked on user". Next build phase: 10.
 
 ---
 
@@ -20,13 +20,13 @@
 | 4 | Guide sales | ✅ | `3ecf790`, `a6c96d5`, `b6f0e4b` (₺ font) |
 | 5 | Booking (without Google) | ✅ | see `git log --grep 'phase 5'` |
 | 6 | Google Calendar | ✅ | `92ebc3c` (live test on staging passed 2026-11-11) |
-| 7 | Intake, reminders, summary | ⬜ | — |
-| 8 | Cleanup and resilience | ⬜ | — |
-| 9 | Go live (prep list for the user, then the switch) | ✅ live 2026-11-13 (first live order delivered; remaining user checks under "Blocked on user") | `4991fad` |
-| 10 | Environment split (was "S"): `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
-| 11 | Promo codes (was "P") (Stripe) from admin, sent via the admin email flow | ✅ live 2026-11-13 (staging test passed: 100% code → €0 guide order delivered) | `e95494e` |
+| 7 | Environment split: `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
+| 8 | Go live (prep list for the user, then the switch) | ✅ live 2026-11-13 (first live order delivered; remaining user checks under "Blocked on user") | `4991fad` |
+| 9 | Promo codes (Stripe) from admin, sent via the admin email flow | ✅ live 2026-11-13 (staging test passed: 100% code → €0 guide order delivered) | `e95494e` |
+| 10 | Intake, reminders, summary | ⬜ | — |
+| 11 | Cleanup and resilience | ⬜ | — |
 
-**Revised order (user decision 2026-11-13):** S → 9 → P → 7 → 8. Table rows are in that order. After Phase 8 everything is a new feature on live.
+**Renumbered 2026-11-13 to match the order actually done.** Old → new: S → 7, 9 → 8, P → 9, 7 → 10, 8 → 11. Commits before this use the old names (`phase S`, `phase 9`, …); SPEC §9 still uses the old numbers. After Phase 11 everything is a new feature on live.
 
 Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · ✅ done
 
@@ -34,7 +34,7 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-**Phase 10 — environment split** (2026-11-13), on branch `staging`:
+**Phase 7 — environment split** (2026-11-13), on branch `staging`:
 - `wrangler.toml`: top level = staging Worker `uceksen` (unchanged resources, `staging.uceksen.com`, `REPLY_LOCAL = "staging"`); `[env.production]` = Worker `uceksen-production` with its own D1 `uceksen-db-production` (`5baf8445-…`), KV `b37ebc7f…`, R2 `uceksen-files-production`, `ENVIRONMENT = "production"`, `APP_URL = https://uceksen.com`, `REPLY_LOCAL = "merhaba"`, `routes = []` (explicit: routes are inherited otherwise and production would take `staging.uceksen.com`), `workers_dev = false`. Sandbox price ids until go-live.
 - CI: push to `staging` → tests → staging migrations → deploy top level; push to `main` → same with `--env production`. GitHub environments `staging` / `production`.
 - Inbound: both environments share `reply.uceksen.com`; `isForThisEnvironment` makes staging keep only `staging[+token]@` mail and production everything else except staging's. Tests added (190 total).
@@ -42,7 +42,7 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 - **Stripe live mirrored 2026-11-13** (account `acct_1UZRHAJ8zQ8f9hgO`, via the temporary setup key `STRIPE_LIVE_SETUP_KEY_UCEKSEN`): products `prod_VcV7JXVd3LzsqI` (Rehber, `txcd_10302000`, €15 `price_1UbG6xJ8zQ8f9hgOL394U2IP`) and `prod_VcV7fPkwd1ZZhl` (Durum Analizi, `txcd_20060048`, €100 `price_1UbG6xJ8zQ8f9hgOO4vxy0kK`), both inclusive; tax settings inclusive + default `txcd_10302000`; NL registration `taxreg_1UbG6wJ8zQ8f9hgO1BsMHr39` (standard, small_seller, as sandbox); webhook `we_1UbG7FJ8zQ8f9hgOdwJp6GYq` → `https://uceksen.com/api/webhooks/stripe` (2 events), secret set as production `STRIPE_WEBHOOK_SECRET`. Live price ids in `[env.production.vars]`. Branding done by the user; Radar Lite; Stripe Tax on. Sandbox consultation description fixed (had lost its "+").
 - Note: test conversations on staging made before the split have `merhaba+…` reply addresses; replies to those now go to production's side, not staging.
 
-**Phase 11 — promo codes (2026-11-13, live in production via merge `e95494e`).**
+**Phase 9 — promo codes (2026-11-13, live in production via merge `e95494e`).**
 - `/admin/kodlar` ("Kodlar" in the admin nav): create a code (own or generated 8-char code; percent 1–100 or €1–200; Rehber / Durum Analizi / both; optional total use limit; optional last day, valid to the end of that day in `host_tz`), list active codes (from Stripe, `metadata.project = uceksen`), "Kapat" deactivates. Stripe holds everything: one coupon (`duration=once`, `applies_to.products`, name = "%N indirim"/"€N indirim", shown at Checkout) + one promotion code per code. Nothing in D1.
 - Conversation page: "İndirim kodu gönder" picks an active code and sends a ready Turkish email through the normal admin send (thread, signature, DEV_EMAIL guard) with the Rehber link and/or the conversation's payment link.
 - Checkout: `allow_promotion_codes` on both products. A 100% code gives a €0 order that Stripe completes with `payment_status = no_payment_required` (no payment intent): `isSettled` treats that as paid only when `amount_total = 0`, so the guide is delivered and the consultation booked. Cancelling a free booking refunds nothing (`refund_status` NULL; email: "ücretsiz olduğu için iade edilecek bir tutar yok").
@@ -53,7 +53,7 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Blocked on user
 
-Production post-switch steps (Phase 9 B4 + C), state 2026-11-13:
+Production post-switch steps (Phase 8 B4 + C), state 2026-11-13:
 1. ✅ Guide PDF uploaded in production (`v1.0`, current).
 2. ✅ Live guide order with a 100% code (`TEST5NVRD2`, 2 uses, expires 2026-11-20; created via the setup key): €0 purchase #1 recorded, delivery email sent without `[TEST]`. **Close the code at `/admin/kodlar` after testing.**
 3. ⬜ Working hours + rules at `/admin/takvim` (production).
@@ -174,7 +174,7 @@ Not blocking, for later:
 > Anything that deviates from `SPEC.md`, or that the spec did not cover, goes here with the reasoning.
 
 - **2026-11-07 — Single deployed environment.** User does not want staging + production. One Worker (`uceksen`) on `uceksen.gizemderinkok.workers.dev` until the domain is handed over. Locally: `wrangler dev`. Replaces SPEC §3 three-environment table.
-- **2026-11-07 — Deployed Worker runs with `ENVIRONMENT = "staging"` until Phase 9.** Because there is only one deployment, it must keep the `DEV_EMAIL` guard on during the build. Flipping `ENVIRONMENT` to `"production"` is part of go-live (Phase 9), done together with the Stripe live key.
+- **2026-11-07 — Deployed Worker runs with `ENVIRONMENT = "staging"` until Phase 8.** Because there is only one deployment, it must keep the `DEV_EMAIL` guard on during the build. Flipping `ENVIRONMENT` to `"production"` is part of go-live (Phase 8), done together with the Stripe live key.
 - **2026-11-07 — CI deploys on every push to `main`** (GitHub Actions: typecheck → tests → D1 migrations → `wrangler deploy`). Global standard; acceptable since the only deployment is guarded as above.
 - **2026-11-07 — Public GitHub repo** under the account tied to `GH_TOKEN` (`wandernull`). Company details (name, address, KvK, BTW) go directly into the legal pages: Dutch law requires them to be shown publicly on a business website anyway, so there is nothing to hide.
 - **2026-11-07 — `AGENTS.md` added; no `PROJECT_PLAN.md`.** `PROGRESS.md` + `SPEC.md` fill that role; a third file would drift.
@@ -240,9 +240,9 @@ Not blocking, for later:
 - **2026-11-13 — Separate staging and production; revised phase order (user decision).** Reverses the 2026-11-07 single-deployment decision: going live while Phases 7–8 continue needs a place to test that isn't production. Branches: work goes to `staging` (deploys staging); `main` gets merges from `staging` only with the user's green light (deploys production on `uceksen.com`). Order: S (split) → 9 (go live) → P (promo codes) → 7 → 8; afterwards everything is a new feature on live. Phase commits now land on `staging` and reach `main` by merge.
 - **2026-11-12 — DEV_EMAIL guard temporarily off on staging (user decision, overriding CLAUDE.md).** `MAIL_GUARD = "off"` in `wrangler.toml`; honoured only for exactly `ENVIRONMENT=staging`. Staging emails now go to the real recipients, so any address typed into a form or used in a test purchase gets real mail. Restore: delete the line and push. **Restored the same day** (`MAIL_GUARD = "on"`); the switch stays for future use.
 - **2026-11-11 — Staging on `staging.uceksen.com` (user request).** Worker custom domain instead of workers.dev, so testing uses the real zone; workers.dev kept on as a fallback until go-live. Still one deployment: going live is config (`APP_URL`, `ENVIRONMENT`, routes) plus Access/webhooks, not a new Worker. Google connected with Baran's account on staging so testing doesn't wait on Gizem; swapped at go-live. The Google connect hint is now the signed-in admin's own address (was always Gizem's).
-- **2026-11-10 — SEO / AI-agent pass (pulled forward from Phase 8's robots/sitemap).** Every public page: Turkish meta description, canonical + Open Graph/X tags pointing at `https://uceksen.com` (never workers.dev), JSON-LD (Organization with legal name/VAT, WebSite; Product+Offer €15 on `/rehber`, Service+Offer €100 on `/danismanlik`, VAT included, `priceValidUntil` 2027-01-31). New titles for `/`, `/rehber`, `/danismanlik` (h1s unchanged). `robots.txt`/`sitemap.xml` from the Worker: outside production `Disallow: /` (staging must not be indexed); production hides token/admin paths, names the sitemap, AI crawlers allowed. `llms.txt` (Turkish summary, products, prices; `src/content/llms.txt`, served by the Worker with `charset=utf-8` — as a static asset it went out without a charset and showed mojibake). Share image `og.png` + favicon/app icons rendered by `scripts/render-brand.mjs` from the site fonts and colours.
+- **2026-11-10 — SEO / AI-agent pass (pulled forward from Phase 11's robots/sitemap).** Every public page: Turkish meta description, canonical + Open Graph/X tags pointing at `https://uceksen.com` (never workers.dev), JSON-LD (Organization with legal name/VAT, WebSite; Product+Offer €15 on `/rehber`, Service+Offer €100 on `/danismanlik`, VAT included, `priceValidUntil` 2027-01-31). New titles for `/`, `/rehber`, `/danismanlik` (h1s unchanged). `robots.txt`/`sitemap.xml` from the Worker: outside production `Disallow: /` (staging must not be indexed); production hides token/admin paths, names the sitemap, AI crawlers allowed. `llms.txt` (Turkish summary, products, prices; `src/content/llms.txt`, served by the Worker with `charset=utf-8` — as a static asset it went out without a charset and showed mojibake). Share image `og.png` + favicon/app icons rendered by `scripts/render-brand.mjs` from the site fonts and colours.
 
-## Phase 9 — go-live checklist (two Workers, from Phase 10)
+## Phase 8 — go-live checklist (two Workers, from Phase 7)
 
 Production = Worker `uceksen-production` (branch `main`), already created with its own D1/KV/R2 and most secrets. Staging stays as it is. **U** = user, **A** = agent.
 
@@ -262,7 +262,7 @@ Production = Worker `uceksen-production` (branch `main`), already created with i
 2. **A** — create the Resend webhook `https://uceksen.com/api/webhooks/resend` (`email.received`) → `RESEND_INBOUND_SECRET --env production`.
 3. **U** — green light → A merges `staging` → `main` → CI deploys production on `uceksen.com` (custom domain creates DNS + certificate; existing MX/TXT stay).
 4. **U** — on `https://uceksen.com/admin/`: upload the real guide PDF (`/admin/rehber`), set working hours/rules (`/admin/takvim`), Gizem connects Google (`gizemderinkok@gmail.com`), check booking + busy calendars. (Production D1/R2 start empty; nothing from staging carries over.)
-5. **A** — backup of production D1 to R2 once data exists (Phase 8 job or manual export).
+5. **A** — backup of production D1 to R2 once data exists (Phase 11 job or manual export).
 
 **C. Checks right after**
 1. **A** — `/health` → `"environment":"production"`; robots.txt allows + sitemap; `/admin/` asks for Access; webhooks reject unsigned requests.
@@ -288,8 +288,8 @@ Production = Worker `uceksen-production` (branch `main`), already created with i
 - Update emails carry the opt-out link in the body only (no `List-Unsubscribe` header yet).
 - `max_per_week` is checked when slots are listed, not inside the booking statement: two people booking the last two free places of a week at the same moment could exceed it by one. Same-slot double booking is impossible.
 - The customer joins Meet without being invited, so Gizem has to admit them ("ask to join"). Intentional: inviting would make Google email the customer.
-- Intake form link in the confirmation email comes with Phase 7.
-- **Go-live (Phase 9), Stripe — sandbox settings do not carry over to live:** activate the live account (KYC, bank), public details (incl. terms-of-service URL, support email), branding (icon, logo, colours), Stripe Tax (head office, inclusive default, NL registration), create both products/prices and put the live price ids in `wrangler.toml`, live webhook endpoint for `https://uceksen.com/api/webhooks/stripe` (same two events) → `STRIPE_WEBHOOK_SECRET`, restricted live key → `STRIPE_SECRET_KEY` (user installs both). Decide whether Stripe also emails its own receipt/invoice (our delivery email already links the invoice).
+- Intake form link in the confirmation email comes with Phase 10.
+- **Go-live (Phase 8), Stripe — sandbox settings do not carry over to live:** activate the live account (KYC, bank), public details (incl. terms-of-service URL, support email), branding (icon, logo, colours), Stripe Tax (head office, inclusive default, NL registration), create both products/prices and put the live price ids in `wrangler.toml`, live webhook endpoint for `https://uceksen.com/api/webhooks/stripe` (same two events) → `STRIPE_WEBHOOK_SECRET`, restricted live key → `STRIPE_SECRET_KEY` (user installs both). Decide whether Stripe also emails its own receipt/invoice (our delivery email already links the invoice).
 - **1 February 2027: the launch prices end — also update the JSON-LD offers (`priceValidUntil`, prices) and `src/content/llms.txt`.**
 - **1 February 2027: the launch prices end — raise them for real** (new live Stripe prices €30 / €200 → `wrangler.toml`; remove the "Lansman fiyatı" notes; terms page). Announcing a future price and not applying it is misleading under consumer law. Moving the date is fine, but do it before it passes.
 - Share previews (`og:image`) and canonicals point at `uceksen.com`, which doesn't resolve until go-live: link previews show no image before then. At go-live robots.txt switches to "allow" with `ENVIRONMENT=production`. Cloudflare's managed robots.txt (content signals) is prepended by Cloudflare — check the zone's AI-crawler settings then.
@@ -301,4 +301,4 @@ Production = Worker `uceksen-production` (branch `main`), already created with i
 
 ## Next step
 
-User: Coupons + Promotion Codes write on the live worker key; post-switch steps (Blocked on user). Then Phase 7 (intake, reminders, summary) on `staging` → Phase 8. `main` only by merge with the user's green light.
+User: Coupons + Promotion Codes write on the live worker key; post-switch steps (Blocked on user). Then Phase 10 (intake, reminders, summary) on `staging` → Phase 11. `main` only by merge with the user's green light.

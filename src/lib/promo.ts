@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import { stripeCall } from "./stripe";
 
 /**
- * Discount codes (Phase 11). Stripe is the source of truth: a coupon (the discount) plus a
+ * Discount codes (Phase 9). Stripe is the source of truth: a coupon (the discount) plus a
  * promotion code (what the customer types at Checkout). Nothing is stored in D1; codes
  * are listed from Stripe by `metadata.project = "uceksen"`.
  */
