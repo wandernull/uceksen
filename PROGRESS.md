@@ -23,8 +23,8 @@
 | 7 | Intake, reminders, summary | ⬜ | — |
 | 8 | Cleanup and resilience | ⬜ | — |
 | 9 | Go live (prep list for the user, then the switch) | ✅ live 2026-11-13 (first live order delivered; remaining user checks under "Blocked on user") | `4991fad` |
-| S | Environment split: `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
-| P | Promo codes (Stripe) from admin, sent via the admin email flow | ✅ live 2026-11-13 (staging test passed: 100% code → €0 guide order delivered) | `e95494e` |
+| 10 | Environment split (was "S"): `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
+| 11 | Promo codes (was "P") (Stripe) from admin, sent via the admin email flow | ✅ live 2026-11-13 (staging test passed: 100% code → €0 guide order delivered) | `e95494e` |
 
 **Revised order (user decision 2026-11-13):** S → 9 → P → 7 → 8. Table rows are in that order. After Phase 8 everything is a new feature on live.
 
