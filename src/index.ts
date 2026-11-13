@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "./env";
+import { sendReminders } from "./lib/booking";
 import { admin } from "./routes/admin/conversations";
 import { adminGoogle } from "./routes/admin/google";
 import { adminGuide } from "./routes/admin/guide";
@@ -43,4 +44,10 @@ app.route("/", pages);
 // (and every request in the test runtime) are handed to the assets binding.
 app.notFound((c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+/** Cron Trigger (hourly, wrangler.toml): 24-hour booking reminders. */
+async function scheduled(_ctrl: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+  const n = await sendReminders(env);
+  if (n) console.log("reminders sent", n);
+}
+
+export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;

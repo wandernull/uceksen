@@ -3,9 +3,11 @@ import { csrf } from "hono/csrf";
 import { DateTime } from "luxon";
 import type { AppEnv } from "../env";
 import {
-  bookSlot, cancelBooking, CONSULT, fulfillConsult, isLive, loadIntent, offeredSlots, policy, rescheduleBooking,
+  bookSlot, cancelBooking, CONSULT, fulfillConsult, intakeOpen, isLive, loadIntent, offeredSlots, policy, rescheduleBooking, saveIntake,
   type Booking, type Intent,
 } from "../lib/booking";
+import { INTAKE_MAX, INTAKE_QUESTIONS, parseIntake, readIntake, type IntakeAnswers } from "../lib/intake";
+import { formatTr } from "../lib/time";
 import { buildIcs } from "../lib/ics";
 import { getHostTz } from "../lib/settings";
 import { formatSlot, isValidZone, SESSION_MINUTES, type Slot } from "../lib/slots";
@@ -212,6 +214,19 @@ function bookedPage(intent: Intent, b: Booking, tz: string, flash?: string) {
           </p>
         )}
       </section>
+      {!cancelled && (
+        <section id="onform">
+          <h2>Görüşme öncesi form</h2>
+          {b.intake_submitted_at ? (
+            <p class="small">Formun bize ulaştı ({formatTr(b.intake_submitted_at, tz)}). {intakeOpen(b) && "Görüşmeye kadar düzenleyebilirsin."}</p>
+          ) : (
+            <p class="small">Birkaç dakika sürer. Doldurursan görüşmeyi senin durumuna göre hazırlıyoruz.</p>
+          )}
+          {intakeOpen(b) && (
+            <p><a class={b.intake_submitted_at ? "btn-ghost" : "btn"} href={`/randevu/${intent.token}/onform`}>{b.intake_submitted_at ? "Formu düzenle" : "Formu doldur"}</a></p>
+          )}
+        </section>
+      )}
     </SiteLayout>,
   );
 }
@@ -229,7 +244,7 @@ randevu.get(`/randevu/:token${TOKEN}`, async (c) => {
   const host = await getHostTz(c.env.DB);
   if (booking) {
     const tz = pickTz(c.req.query("tz"), booking.customer_tz);
-    const flash = c.req.query("ayarlandi") ? "Onay e-postası ve takvim dosyası yolda." : c.req.query("degisti") ? "Yeni saat kaydedildi; güncel takvim dosyası e-postanda." : c.req.query("iptal") ? "İptal edildi; ayrıntılar e-postanda." : undefined;
+    const flash = c.req.query("ayarlandi") ? "Onay e-postası ve takvim dosyası yolda." : c.req.query("degisti") ? "Yeni saat kaydedildi; güncel takvim dosyası e-postanda." : c.req.query("iptal") ? "İptal edildi; ayrıntılar e-postanda." : c.req.query("onform") ? "Formun kaydedildi, teşekkürler." : undefined;
     return c.html(bookedPage(intent, booking, tz, flash));
   }
   if (DateTime.fromISO(intent.expires_at, { zone: "utc" }) <= DateTime.utc()) {
@@ -268,6 +283,66 @@ randevu.get(`/randevu/:token${TOKEN}/takvim.ics`, async (c) => {
     "Content-Type": "text/calendar; charset=utf-8",
     "Content-Disposition": 'attachment; filename="durum-analizi.ics"',
   });
+});
+
+// --- Intake form ------------------------------------------------------------------------------------
+
+function intakePage(intent: Intent, b: Booking, answers: IntakeAnswers | null, error?: string) {
+  const open = intakeOpen(b);
+  return html(
+    <SiteLayout title="Görüşme öncesi form — Üç Eksen" noindex>
+      <header>
+        <p class="eyebrow">Durum Analizi</p>
+        <h1>Görüşme öncesi form</h1>
+        <p class="lede">
+          {open
+            ? "Görüşmeyi verimli geçirmek için birkaç soru. Kısa cevaplar yeterli; bilmediğin yeri boş bırakabilirsin."
+            : "Görüşme başladığı için form artık değiştirilemiyor."}
+        </p>
+      </header>
+      <section>
+        {open ? (
+          <form class="form-stack" method="post" action={`/randevu/${intent.token}/onform`}>
+            {error && <p class="form-error" role="alert">{error}</p>}
+            {INTAKE_QUESTIONS.map((q) => (
+              <>
+                <label for={`q-${q.key}`}>{q.label}{!q.required && <span class="opt"> (isteğe bağlı)</span>}</label>
+                {q.hint && <p class="small" id={`h-${q.key}`}>{q.hint}</p>}
+                <textarea id={`q-${q.key}`} name={q.key} rows={q.key === "beklenti" || q.key === "ek" ? 4 : 3} maxlength={INTAKE_MAX}
+                  required={q.required} aria-describedby={q.hint ? `h-${q.key}` : undefined}>{answers?.[q.key] ?? ""}</textarea>
+              </>
+            ))}
+            <button class="btn" type="submit">Formu kaydet</button>
+          </form>
+        ) : (
+          <dl class="facts">
+            {INTAKE_QUESTIONS.map((q) => <><dt>{q.label}</dt><dd>{answers?.[q.key] || "—"}</dd></>)}
+          </dl>
+        )}
+        <p><a href={`/randevu/${intent.token}`}>← Görüşmen</a></p>
+      </section>
+    </SiteLayout>,
+  );
+}
+
+randevu.get(`/randevu/:token${TOKEN}/onform`, async (c) => {
+  const found = await loadIntent(c.env.DB, c.req.param("token"));
+  if (!found) return c.html(notFound(), 404);
+  if (!found.booking || found.booking.state === "cancelled") return c.redirect(`/randevu/${found.intent.token}`, 303);
+  return c.html(intakePage(found.intent, found.booking, readIntake(found.booking.intake_json)));
+});
+
+randevu.post(`/randevu/:token${TOKEN}/onform`, async (c) => {
+  const found = await loadIntent(c.env.DB, c.req.param("token"));
+  if (!found) return c.html(notFound(), 404);
+  const { intent, booking } = found;
+  if (!booking || booking.state === "cancelled") return c.redirect(`/randevu/${intent.token}`, 303);
+  const parsed = parseIntake(await c.req.parseBody());
+  if (!parsed.ok) return c.html(intakePage(intent, booking, parsed.answers, parsed.error), 400);
+  if (!(await saveIntake(c.env, intent, booking, parsed.answers))) {
+    return c.html(intakePage(intent, booking, readIntake(booking.intake_json), "Görüşme başladığı için form artık kaydedilemiyor."), 409);
+  }
+  return c.redirect(`/randevu/${intent.token}?onform=1#onform`, 303);
 });
 
 // --- Reschedule / cancel ----------------------------------------------------------------------------

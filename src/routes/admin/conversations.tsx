@@ -3,7 +3,8 @@ import { csrf } from "hono/csrf";
 import type { AppEnv } from "../../env";
 import { requireAdmin } from "../../lib/admin-auth";
 import { attachmentsFor, formatSize, serveAttachment } from "../../lib/attachments";
-import { cancelBooking, loadIntent, offerConsult, paymentUrl, retryGoogle } from "../../lib/booking";
+import { cancelBooking, loadIntent, offerConsult, paymentUrl, retryGoogle, sendSummary, SUMMARY_MAX } from "../../lib/booking";
+import { INTAKE_QUESTIONS, readIntake } from "../../lib/intake";
 import { conversationUrl, deliverMessage, sendOutgoing } from "../../lib/conversations";
 import { getPromo, listPromos, promoBody } from "../../lib/promo";
 import { promoMeta } from "./promos";
@@ -250,13 +251,14 @@ type ConsultRow = {
   expires_at: string; booking_id: number | null; start_utc: string | null; customer_tz: string | null; state: string | null;
   reschedule_count: number | null; refund_status: string | null; cancelled_by: string | null;
   meet_url: string | null; gcal_status: string | null; gcal_error: string | null;
+  intake_json: string | null; intake_submitted_at: string | null; summary_sent_at: string | null; reminder_sent_at: string | null;
 };
 
 async function consultFor(db: D1Database, convId: number) {
   return (await db.prepare(
     `SELECT i.id AS intent_id, i.token, i.created_at, i.amount_cents, i.currency, i.invoice_url, i.expires_at,
             b.id AS booking_id, b.start_utc, b.customer_tz, b.state, b.reschedule_count, b.refund_status, b.cancelled_by,
-            b.meet_url, b.gcal_status, b.gcal_error
+            b.meet_url, b.gcal_status, b.gcal_error, b.intake_json, b.intake_submitted_at, b.summary_sent_at, b.reminder_sent_at
        FROM booking_intents i LEFT JOIN bookings b ON b.booking_intent_id = i.id
       WHERE i.conversation_id = ?1 ORDER BY i.id`,
   ).bind(convId).all<ConsultRow>()).results;
@@ -287,6 +289,39 @@ function GoogleFacts({ r }: { r: ConsultRow }) {
   );
 }
 
+function IntakeFacts({ r, tz }: { r: ConsultRow; tz: string }) {
+  const a = readIntake(r.intake_json);
+  return (
+    <>
+      <dt>Ön form</dt>
+      <dd>
+        {a ? (
+          <details>
+            <summary>Dolduruldu · {formatTr(r.intake_submitted_at, tz)}</summary>
+            <dl class="facts">
+              {INTAKE_QUESTIONS.map((q) => <><dt>{q.label}</dt><dd class="msg-body">{a[q.key] || "—"}</dd></>)}
+            </dl>
+          </details>
+        ) : "Doldurulmadı"}
+      </dd>
+      <dt>Hatırlatma</dt>
+      <dd>{r.reminder_sent_at ? `Gönderildi · ${formatTr(r.reminder_sent_at, tz)}` : "Görüşmeden ~24 saat önce gidecek"}</dd>
+    </>
+  );
+}
+
+function SummaryForm({ r, tz, signer }: { r: ConsultRow; tz: string; signer: string }) {
+  if (r.summary_sent_at) return <p class="small">Yazılı özet gönderildi · {formatTr(r.summary_sent_at, tz)}. Ek notlar için aşağıdan normal yanıt yaz.</p>;
+  if (Date.parse(r.start_utc!) > Date.now()) return <p class="small">Yazılı özet görüşmeden sonra buradan gönderilecek.</p>;
+  return (
+    <form class="form-stack" id="ozet" method="post" action={`/admin/randevu/${r.booking_id}/ozet`}>
+      <label for={`ozet-${r.booking_id}`}>Yazılı özet <span class="opt">(konuşmaya eklenir ve e-postayla gider, imza: {signer}; randevu “Tamamlandı” olur)</span></label>
+      <textarea id={`ozet-${r.booking_id}`} name="metin" rows={14} required maxlength={SUMMARY_MAX}></textarea>
+      <button class="btn" type="submit">Özeti gönder</button>
+    </form>
+  );
+}
+
 function ConsultSection({ env, conv, consult, tz, signer, flash }: { env: Env; conv: Conv; consult: ConsultRow[]; tz: string; signer: string; flash?: string }) {
   const payUrl = paymentUrl(env, conv.reply_token);
   return (
@@ -297,6 +332,8 @@ function ConsultSection({ env, conv, consult, tz, signer, flash }: { env: Env; c
       {flash === "iptal" && <p class="note" role="status">Randevu iptal edildi.</p>}
       {flash === "google" && <p class="note" role="status">Google Takvim güncellendi.</p>}
       {flash === "googlehata" && <p class="form-error" role="alert">Google Takvim'e yine yazılamadı. Takvim sayfasında bağlantıyı kontrol et.</p>}
+      {flash === "ozet1" && <p class="note" role="status">Özet gönderildi.</p>}
+      {flash === "ozet0" && <p class="form-error" role="alert">Özet kaydedildi ama gönderilemedi. Mesajlardan tekrar gönderebilirsin.</p>}
       {consult.map((r) => (
         <dl class="facts">
           <dt>Ödeme</dt>
@@ -318,6 +355,7 @@ function ConsultSection({ env, conv, consult, tz, signer, flash }: { env: Env; c
             )}
           </dd>
           {r.booking_id && <GoogleFacts r={r} />}
+          {r.booking_id && r.state !== "cancelled" && <IntakeFacts r={r} tz={tz} />}
           <dt>Müşteri sayfası</dt>
           <dd><a href={`${env.APP_URL}/randevu/${r.token}`} rel="noreferrer">{`${env.APP_URL}/randevu/${r.token}`}</a></dd>
           {r.booking_id && (r.state === "confirmed" || r.state === "rescheduled") && (
@@ -332,6 +370,9 @@ function ConsultSection({ env, conv, consult, tz, signer, flash }: { env: Env; c
             </>
           )}
         </dl>
+      ))}
+      {consult.filter((r) => r.booking_id && r.state !== "cancelled" && r.start_utc).map((r) => (
+        <SummaryForm r={r} tz={tz} signer={signer} />
       ))}
       {consult.length === 0 && (
         <>
@@ -370,6 +411,20 @@ admin.post("/randevu/:id{[0-9]+}/iptal", async (c) => {
   const r = await cancelBooking(c.env, found.intent, found.booking, "admin", c.get("admin").author);
   if (!r.ok) return c.text("Bu randevu iptal edilemiyor (geçmişte ya da zaten iptal).", 409);
   return c.redirect(`/admin/konusma/${found.intent.conversation_id}?odeme=iptal#danismanlik`, 303);
+});
+
+admin.post("/randevu/:id{[0-9]+}/ozet", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await c.req.parseBody();
+  const text = (typeof body.metin === "string" ? body.metin : "").replace(/\r\n/g, "\n").trim();
+  if (!text) return c.text("Özet boş.", 400);
+  if (text.length > SUMMARY_MAX) return c.text("Özet çok uzun.", 400);
+  const r = await sendSummary(c.env, id, c.get("admin").author, text);
+  if (!r.ok) {
+    const msg = { not_found: "Randevu bulunamadı.", too_early: "Görüşme henüz yapılmadı.", already: "Bu görüşmenin özeti zaten gönderildi." }[r.reason];
+    return c.text(msg, r.reason === "not_found" ? 404 : 409);
+  }
+  return c.redirect(`/admin/konusma/${r.conversationId}?odeme=ozet${r.sent ? 1 : 0}#danismanlik`, 303);
 });
 
 admin.post("/randevu/:id{[0-9]+}/google", async (c) => {

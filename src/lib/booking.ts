@@ -3,6 +3,7 @@ import type { Author } from "../env";
 import { AUTHOR_NAME, deliverMessage, notifyAdmins, sendOutgoing } from "./conversations";
 import { googleBusy, GoogleError, googleProblem, syncBookingEvent, type GoogleEnv, type SyncResult } from "./google";
 import { formatEur } from "./guide";
+import { intakeText, type IntakeAnswers } from "./intake";
 import { loadAvailability } from "./settings";
 import { computeSlots, formatSlot, isoUtc, SESSION_MINUTES } from "./slots";
 import { isSettled, refundPayment, retrieveInvoice, type CheckoutSession } from "./stripe";
@@ -21,6 +22,7 @@ const LIVE = "('confirmed', 'rescheduled')";
 
 export const randevuUrl = (env: Pick<Env, "APP_URL">, token: string) => `${env.APP_URL}/randevu/${token}`;
 export const manageUrl = (env: Pick<Env, "APP_URL">, token: string) => `${env.APP_URL}/randevu/${token}/degistir`;
+export const intakeUrl = (env: Pick<Env, "APP_URL">, token: string) => `${env.APP_URL}/randevu/${token}/onform`;
 export const paymentUrl = (env: Pick<Env, "APP_URL">, replyToken: string) => `${env.APP_URL}/konusma/${replyToken}/odeme`;
 
 const hello = (name: string | null) => (name ? `Merhaba ${name},` : "Merhaba,");
@@ -148,6 +150,7 @@ export type Intent = {
 export type Booking = {
   id: number; start_utc: string; end_utc: string; customer_tz: string; state: string; reschedule_count: number;
   meet_url: string | null; cancelled_by: string | null; refund_status: string | null;
+  intake_json: string | null; intake_submitted_at: string | null;
 };
 
 export async function loadIntent(db: D1Database, token: string): Promise<{ intent: Intent; booking: Booking | null } | null> {
@@ -158,7 +161,8 @@ export async function loadIntent(db: D1Database, token: string): Promise<{ inten
   ).bind(token).first<Intent>();
   if (!intent) return null;
   const booking = await db.prepare(
-    `SELECT id, start_utc, end_utc, customer_tz, state, reschedule_count, meet_url, cancelled_by, refund_status
+    `SELECT id, start_utc, end_utc, customer_tz, state, reschedule_count, meet_url, cancelled_by, refund_status,
+            intake_json, intake_submitted_at
        FROM bookings WHERE booking_intent_id = ?1 ORDER BY id DESC LIMIT 1`,
   ).bind(intent.id).first<Booking>();
   return { intent, booking };
@@ -250,6 +254,9 @@ export function confirmBody(env: Pick<Env, "APP_URL">, p: { name: string | null;
     p.meetUrl ? `Görüşme bağlantısı: ${p.meetUrl}` : "Görüşme bağlantısı (Google Meet) görüşmeden önce e-postana gelecek.",
     "",
     "Takvimine eklemek için ekteki dosyayı aç.",
+    "",
+    "Görüşmeden önce kısa bir form var. Doldurursan görüşmeyi senin durumuna göre hazırlıyoruz:",
+    intakeUrl(env, p.token),
     "",
     `Saati değiştirmek ya da iptal etmek için: ${manageUrl(env, p.token)}`,
     `Saat, görüşmeye ${CONSULT.rescheduleHours} saatten fazla varken en fazla ${CONSULT.maxReschedules} kez değiştirilebilir. ${CONSULT.refundHours} saatten fazla varken iptal edersen ücretin tamamı iade edilir.`,
@@ -349,7 +356,7 @@ export async function rescheduleBooking(
   try {
     res = await env.DB.prepare(
       `UPDATE bookings SET start_utc = ?1, end_utc = ?2, customer_tz = ?3, state = 'rescheduled',
-              reschedule_count = reschedule_count + 1, updated_at = ?4
+              reschedule_count = reschedule_count + 1, reminder_sent_at = NULL, updated_at = ?4
         WHERE id = ?5 AND state IN ${LIVE} AND reschedule_count < ?6 AND start_utc > ?7
           AND NOT EXISTS (SELECT 1 FROM bookings b2 WHERE b2.id != ?5 AND b2.state IN ${LIVE} AND b2.start_utc < ?8 AND b2.end_utc > ?9)`,
     ).bind(
@@ -496,4 +503,97 @@ export async function retryGoogle(env: BookingEnv, bookingId: number): Promise<S
       { via: "system", bookingId });
   }
   return g;
+}
+
+// --- 7. Intake form ----------------------------------------------------------------------------------
+
+/** The customer can fill in or edit the form until the call starts. */
+export const intakeOpen = (b: Booking, now = DateTime.utc()) => isLive(b) && DateTime.fromISO(b.start_utc, { zone: "utc" }) > now;
+
+export async function saveIntake(env: BookingEnv, intent: Intent, booking: Booking, answers: IntakeAnswers): Promise<boolean> {
+  const now = nowIso();
+  const res = await env.DB.prepare(
+    `UPDATE bookings SET intake_json = ?1, intake_submitted_at = ?2, updated_at = ?2
+      WHERE id = ?3 AND state IN ${LIVE} AND start_utc > ?2`,
+  ).bind(JSON.stringify(answers), now, booking.id).run();
+  if (!res.meta.changes) return false;
+  await notifyAdmins(env, `Ön form ${booking.intake_submitted_at ? "güncellendi" : "dolduruldu"}: ${intent.name ?? intent.email}`, [
+    intent.name ? `${intent.name} <${intent.email}>` : intent.email,
+    `Görüşme: ${when(booking.start_utc, await hostTz(env.DB))}`,
+    "",
+    intakeText(answers),
+    "",
+    `Aç: ${env.APP_URL}/admin/konusma/${intent.conversation_id}`,
+  ]);
+  return true;
+}
+
+// --- 8. Reminder (Cron Trigger) ---------------------------------------------------------------------
+
+/**
+ * The cron runs hourly. A booking is due once its start is 23–25 hours away: one run lands
+ * in 24–25 h, the extra hour covers a missed run. Bookings made closer than that get none.
+ */
+export const REMINDER = { fromHours: 23, toHours: 25 } as const;
+
+export function reminderBody(env: Pick<Env, "APP_URL">, p: { name: string | null; token: string; start: string; tz: string; meetUrl: string | null; intakeDone: boolean }): string {
+  return [
+    hello(p.name),
+    "",
+    "Yarın görüşüyoruz.",
+    "",
+    `Tarih: ${when(p.start, p.tz)}`,
+    `Süre: ${SESSION_MINUTES} dakika`,
+    p.meetUrl ? `Görüşme bağlantısı: ${p.meetUrl}` : "Görüşme bağlantısını (Google Meet) görüşmeden önce ayrıca göndereceğiz.",
+    "",
+    ...(p.intakeDone
+      ? ["Ön formun bize ulaştı, teşekkürler. Eklemek istediğin bir şey olursa:", intakeUrl(env, p.token)]
+      : ["Görüşmeden önceki kısa formu henüz doldurmadın. Birkaç dakika sürer ve görüşmeyi senin durumuna göre hazırlamamızı sağlar:", intakeUrl(env, p.token)]),
+    "",
+    `Görüşmeyi iptal etmen gerekirse: ${manageUrl(env, p.token)}`,
+  ].join("\n");
+}
+
+/** Sends every due reminder once. Each booking is claimed in the database before its email goes out. */
+export async function sendReminders(env: BookingEnv, now = DateTime.utc()): Promise<number> {
+  const due = await env.DB.prepare(
+    `SELECT b.id, b.start_utc, b.customer_tz, b.meet_url, b.intake_submitted_at, b.conversation_id, i.token, ct.name
+       FROM bookings b JOIN booking_intents i ON i.id = b.booking_intent_id JOIN contacts ct ON ct.id = b.contact_id
+      WHERE b.state IN ${LIVE} AND b.reminder_sent_at IS NULL AND b.start_utc > ?1 AND b.start_utc <= ?2`,
+  ).bind(isoUtc(now.plus({ hours: REMINDER.fromHours })), isoUtc(now.plus({ hours: REMINDER.toHours })))
+    .all<{ id: number; start_utc: string; customer_tz: string; meet_url: string | null; intake_submitted_at: string | null; conversation_id: number; token: string; name: string | null }>();
+  let sent = 0;
+  for (const b of due.results) {
+    const claim = await env.DB.prepare("UPDATE bookings SET reminder_sent_at = ?1 WHERE id = ?2 AND reminder_sent_at IS NULL")
+      .bind(nowIso(), b.id).run();
+    if (!claim.meta.changes) continue;
+    await sendOutgoing(env, b.conversation_id, "system",
+      reminderBody(env, { name: b.name, token: b.token, start: b.start_utc, tz: b.customer_tz, meetUrl: b.meet_url, intakeDone: !!b.intake_submitted_at }),
+      { via: "system" });
+    sent++;
+  }
+  return sent;
+}
+
+// --- 9. Written summary (admin) ---------------------------------------------------------------------
+
+export const SUMMARY_MAX = 20000;
+
+/**
+ * After the call: the summary goes into the thread and out by email; the booking and the
+ * conversation are marked completed. Only once per booking, and only after the call started.
+ */
+export async function sendSummary(env: BookingEnv, bookingId: number, author: Author, text: string): Promise<{ ok: true; sent: boolean; conversationId: number } | { ok: false; reason: "not_found" | "too_early" | "already" }> {
+  const b = await env.DB.prepare("SELECT id, conversation_id, start_utc, state, summary_sent_at FROM bookings WHERE id = ?1")
+    .bind(bookingId).first<{ id: number; conversation_id: number; start_utc: string; state: string; summary_sent_at: string | null }>();
+  if (!b || b.state === "cancelled") return { ok: false, reason: "not_found" };
+  if (DateTime.fromISO(b.start_utc, { zone: "utc" }) > DateTime.utc()) return { ok: false, reason: "too_early" };
+  const now = nowIso();
+  const claim = await env.DB.prepare(
+    `UPDATE bookings SET summary_sent_at = ?1, updated_at = ?1, state = CASE WHEN state IN ${LIVE} THEN 'completed' ELSE state END
+      WHERE id = ?2 AND summary_sent_at IS NULL`,
+  ).bind(now, b.id).run();
+  if (!claim.meta.changes) return { ok: false, reason: "already" };
+  const { sent } = await sendOutgoing(env, b.conversation_id, author, text, { via: "admin", nextState: "completed" });
+  return { ok: true, sent, conversationId: b.conversation_id };
 }

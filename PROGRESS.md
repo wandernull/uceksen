@@ -23,7 +23,7 @@
 | 7 | Environment split: `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
 | 8 | Go live (prep list for the user, then the switch) | ✅ live 2026-11-13 (first live order delivered; remaining user checks under "Blocked on user") | `4991fad` |
 | 9 | Promo codes (Stripe) from admin, sent via the admin email flow | ✅ live 2026-11-13 (staging test passed: 100% code → €0 guide order delivered) | `e95494e` |
-| 10 | Intake, reminders, summary | 🔄 intake questions awaiting approval | — |
+| 10 | Intake, reminders, summary | 🔄 built on staging, awaiting user test/approval | — |
 | 11 | Cleanup and resilience | ⬜ | — |
 | 12 | AI summary draft: admin pastes call notes/transcript → Claude API drafts a structured Turkish summary (with intake answers + thread) → admin edits → sends via the Phase 10 summary flow | ⬜ after 11 | — |
 
@@ -35,11 +35,12 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-**Phase 10 — intake, reminders, summary** (started 2026-11-13, branch `staging`). Plan:
-1. Intake form `/randevu/{token}/onform` (6 questions, stored in `bookings.intake_json`), linked from the confirmation email and the booking page; editable until the call starts. Shown on the admin booking/conversation page.
-2. Reminder ~24 h before the call: hourly Cron Trigger, idempotent via a sent-marker on the booking; mentions the intake form if it is still empty.
-3. Written summary: admin writes it on the conversation page after the call → stored in the thread, emailed (normal admin send, DEV_EMAIL guard), `summary_sent_at` set.
-- **Waiting on the user:** approval of the Turkish intake questions (drafted 2026-11-13).
+**Phase 10 — intake, reminders, summary** (2026-11-13, branch `staging`) — built, awaiting the user's test and approval.
+- **Intake form** `/randevu/{token}/onform`: the 7 approved questions (only "Bu görüşmeden sonra neyi netleştirmiş olmak istiyorsun?" required; 3000 chars each), stored in `bookings.intake_json` + `intake_submitted_at`. Linked from the confirmation email and a "Görüşme öncesi form" card on `/randevu/{token}`. Editable until the call starts, then read-only; gone for cancelled bookings. Each save emails the admins ("Ön form dolduruldu/güncellendi" with the answers). The answers are not posted into the customer thread; admins see them on the conversation page (Durum Analizi → Ön form).
+- **Reminder:** hourly Cron Trigger (`0 * * * *`, both Workers) → `sendReminders`. Due when the call is 23–25 h away (one hourly run lands in 24–25 h; the extra hour covers a missed run), so bookings made closer than that get none. Claimed per booking via `reminder_sent_at` (migration `0007`) before sending; a reschedule clears it. Text asks for the form if it is empty, thanks for it otherwise; Meet link included. Goes through the thread (author "Sistem").
+- **Written summary:** after the call starts, the conversation page shows "Yazılı özet" → `POST /admin/randevu/:id/ozet`: sent like an admin reply (signed, threaded, DEV_EMAIL guard), sets `summary_sent_at`, booking → `completed`, conversation → `completed`. Once per booking; later notes go as normal replies.
+- Tests: `test/intake.test.ts` (9; DST formatting, window edges, idempotency, re-arm on reschedule, scheduled handler, summary guards). 215 total pass, mutation-checked. Layout check (real email) not run.
+- On merge to `main`: CI applies migration `0007` to production D1 and the cron starts there.
 
 ## Blocked on user
 

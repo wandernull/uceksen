@@ -73,6 +73,10 @@ bucket_name = "uceksen-files"
 [observability]
 enabled = true
 
+# Hourly: 24-hour booking reminders (src/index.ts → sendReminders).
+[triggers]
+crons = ["0 * * * *"]
+
 # ---------------------------------------------------------------- production
 [env.production]
 name = "uceksen-production"
@@ -117,3 +121,6 @@ bucket_name = "uceksen-files-production"
 
 [env.production.observability]
 enabled = true
+
+[env.production.triggers]
+crons = ["0 * * * *"]
