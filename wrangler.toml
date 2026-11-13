@@ -95,9 +95,9 @@ MAIL_FROM = "Üç Eksen <merhaba@uceksen.com>"
 MAIL_DOMAIN = "uceksen.com"
 REPLY_LOCAL = "merhaba"
 REPLY_DOMAIN = "reply.uceksen.com"
-# GO-LIVE (Phase 9): replace with the live price ids. Sandbox ids until then.
-STRIPE_PRICE_GUIDE = "price_1UZUGsJguQXFmVyOe5dbLWcY"
-STRIPE_PRICE_CONSULT = "price_1UaLI4JguQXFmVyOT5C8HrYe"
+# Live Stripe prices (account acct_1UZRHAJ8zQ8f9hgO, created 2026-11-13).
+STRIPE_PRICE_GUIDE = "price_1UbG6xJ8zQ8f9hgOL394U2IP"
+STRIPE_PRICE_CONSULT = "price_1UbG6xJ8zQ8f9hgOO4vxy0kK"
 
 [[env.production.d1_databases]]
 binding = "DB"
