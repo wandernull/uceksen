@@ -4,8 +4,8 @@
 > When the user returns after a break, this file tells them where things stand.
 
 **Last updated:** 2026-11-13
-**Active phase:** S — Environment split (staging / production)
-**Status:** 🔄 built on branch `staging`; staging deploy test next, then the user's green light to merge into `main` (first production deploy, no public hostname yet).
+**Active phase:** 9 — Go live
+**Status:** 🟢 **LIVE on https://uceksen.com since 2026-11-13** (production Worker `uceksen-production`, `main` @ `4991fad`). Waiting for the user's post-switch steps (section B4 + C below). Then Phase P.
 
 ---
 
@@ -20,8 +20,8 @@
 | 4 | Guide sales | ✅ | `3ecf790`, `a6c96d5`, `b6f0e4b` (₺ font) |
 | 5 | Booking (without Google) | ✅ | see `git log --grep 'phase 5'` |
 | 6 | Google Calendar | ✅ | `92ebc3c` (live test on staging passed 2026-11-11) |
-| S | Environment split: `staging` branch → staging, `main` → production Worker | 🔄 | on `staging` |
-| 9 | Go live (prep list for the user, then the switch) | ⬜ | — |
+| S | Environment split: `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
+| 9 | Go live (prep list for the user, then the switch) | 🔄 live, user checks pending | `4991fad` |
 | P | Promo codes (Stripe) from admin, sent via the admin email flow | ⬜ | — |
 | 7 | Intake, reminders, summary | ⬜ | — |
 | 8 | Cleanup and resilience | ⬜ | — |
@@ -46,8 +46,12 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Blocked on user
 
-1. **Green light to merge `staging` → `main`** after the staging deploy check. That merge deploys the production Worker for the first time (no hostname yet, so nothing public changes).
-2. **Go-live prep (Phase 9 section A below)** — can start now.
+Post-switch steps on `https://uceksen.com/admin/` (Phase 9 B4 + C):
+1. Upload the real guide PDF at `/admin/rehber` (until then "Satın al" shows the "yakında" page, 503 — by design).
+2. Working hours + rules at `/admin/takvim`.
+3. Gizem connects Google (`gizemderinkok@gmail.com`), checks booking calendar "Üç Eksen" + busy calendars.
+4. Real tests: guide purchase → download → refund; consultation purchase → booking → Meet event + `.ics` → cancel (>48 h) → refund; contact form → admin reply → email reply lands in the thread; link preview.
+5. Delete the Stripe setup key (dashboard + `STRIPE_LIVE_SETUP_KEY_UCEKSEN` in creds).
 
 Google preparation (done 2026-11-10): GCP project `uceksen` under `baran@botelabs.io`, Calendar API on, consent screen External + **In production** (unverified; fine for one user), scopes `calendar.events`, `calendar.freebusy`, `calendar.calendarlist.readonly`, no logo (a logo forces verification). Authorized domains `uceksen.com` + `gizemderinkok.workers.dev`; homepage/privacy/terms links point at `uceksen.com`. Web client `uceksen-web` with redirect URIs for workers.dev, `uceksen.com` and `localhost:8787` (`/admin/google/callback`). Client id/secret in `~/.gizem-creds` (`GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`) → `.dev.vars` + Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; `ENCRYPTION_KEY` generated separately for local and the Worker. "Üç Eksen" calendar created; Baran's calendar shared free/busy with Gizem.
 
@@ -221,6 +225,7 @@ Not blocking, for later:
 
 - **2026-11-10 — Consultation €100 (was €200); launch prices, no strikethrough.** User asked for crossed-out "was" prices (~~€30~~ €15, ~~€200~~ €100). Not done: under the EU Price Indication Directive art. 6a (Omnibus, ACM in NL) a crossed-out price must be the lowest price actually charged in the previous 30 days, and neither was ever charged. Instead (user's choice): "Lansman fiyatı. 1 Şubat 2027'den itibaren €30 / €200" under the price on `/rehber`, `/danismanlik`, the payment page and the terms. The home page shows no prices. Sandbox consult price now `price_1UaLI4JguQXFmVyOT5C8HrYe` (€100, inclusive); the €200 price is archived.
 
+- **2026-11-13 — Went live.** Switch done by A after the user's go: production Resend webhook `860977ab-…` + secret, `uceksen.com` route on `[env.production]`, fast-forward merge `staging` → `main` (`4991fad`), CI deployed production. Checks passed: `/health` production + DB, all public pages/sitemap/llms.txt/og.png 200, robots.txt production rules + sitemap, `/admin/` → Access login, both webhooks 401 unsigned, www → apex 301, staging still healthy. Guide purchase answers 503 until a guide version exists in production (intended).
 - **2026-11-13 — Production `routes = []` explicit; no `www` on the Worker.** Wrangler inherits top-level routes into environments, which would move `staging.uceksen.com` to production. `www` is redirected by a Cloudflare redirect rule, not served by the Worker (static assets would otherwise be served twice, and `/admin` on `www` is outside Access).
 - **2026-11-13 — Separate staging and production; revised phase order (user decision).** Reverses the 2026-11-07 single-deployment decision: going live while Phases 7–8 continue needs a place to test that isn't production. Branches: work goes to `staging` (deploys staging); `main` gets merges from `staging` only with the user's green light (deploys production on `uceksen.com`). Order: S (split) → 9 (go live) → P (promo codes) → 7 → 8; afterwards everything is a new feature on live. Phase commits now land on `staging` and reach `main` by merge.
 - **2026-11-12 — DEV_EMAIL guard temporarily off on staging (user decision, overriding CLAUDE.md).** `MAIL_GUARD = "off"` in `wrangler.toml`; honoured only for exactly `ENVIRONMENT=staging`. Staging emails now go to the real recipients, so any address typed into a form or used in a test purchase gets real mail. Restore: delete the line and push. **Restored the same day** (`MAIL_GUARD = "on"`); the switch stays for future use.
@@ -284,4 +289,4 @@ Production = Worker `uceksen-production` (branch `main`), already created with i
 
 ## Next step
 
-Staging deploy check (push to `staging`) → user's green light → merge into `main` (first production deploy, no hostname) → user does Phase 9 section A → switch (section B) → Phase P (promo codes) → Phase 7 → Phase 8.
+User's post-switch steps (Blocked on user) → Phase P (promo codes) → Phase 7 → Phase 8. All work on `staging`; `main` only by merge with the user's green light.
