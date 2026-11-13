@@ -23,7 +23,7 @@
 | 7 | Environment split: `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
 | 8 | Go live (prep list for the user, then the switch) | ✅ live 2026-11-13 (first live order delivered; remaining user checks under "Blocked on user") | `4991fad` |
 | 9 | Promo codes (Stripe) from admin, sent via the admin email flow | ✅ live 2026-11-13 (staging test passed: 100% code → €0 guide order delivered) | `e95494e` |
-| 10 | Intake, reminders, summary | ⬜ | — |
+| 10 | Intake, reminders, summary | 🔄 intake questions awaiting approval | — |
 | 11 | Cleanup and resilience | ⬜ | — |
 | 12 | AI summary draft: admin pastes call notes/transcript → Claude API drafts a structured Turkish summary (with intake answers + thread) → admin edits → sends via the Phase 10 summary flow | ⬜ after 11 | — |
 
@@ -35,22 +35,11 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-**Phase 7 — environment split** (2026-11-13), on branch `staging`:
-- `wrangler.toml`: top level = staging Worker `uceksen` (unchanged resources, `staging.uceksen.com`, `REPLY_LOCAL = "staging"`); `[env.production]` = Worker `uceksen-production` with its own D1 `uceksen-db-production` (`5baf8445-…`), KV `b37ebc7f…`, R2 `uceksen-files-production`, `ENVIRONMENT = "production"`, `APP_URL = https://uceksen.com`, `REPLY_LOCAL = "merhaba"`, `routes = []` (explicit: routes are inherited otherwise and production would take `staging.uceksen.com`), `workers_dev = false`. Sandbox price ids until go-live.
-- CI: push to `staging` → tests → staging migrations → deploy top level; push to `main` → same with `--env production`. GitHub environments `staging` / `production`.
-- Inbound: both environments share `reply.uceksen.com`; `isForThisEnvironment` makes staging keep only `staging[+token]@` mail and production everything else except staging's. Tests added (190 total).
-- Production D1 migrated (0001–0006, settings row present). Production secrets set: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `ENCRYPTION_KEY` (new random), `ADMIN_EMAILS` (`gizem=gizemderinkok@gmail.com,baran=bbartu.demirci@gmail.com`, copied from `.dev.vars`). `STRIPE_SECRET_KEY` = restricted live key "uceksen worker" (Checkout Sessions, Charges and Refunds, Invoices — all write; `STRIPE_LIVE_KEY_UCEKSEN` in creds), set 2026-11-13. `RESEND_INBOUND_SECRET` from production Resend webhook `860977ab-9a52-4499-981a-ea5c532e42b6` → `https://uceksen.com/api/webhooks/resend` (`email.received`), set 2026-11-13. `DEV_EMAIL` not needed in production.
-- **Stripe live mirrored 2026-11-13** (account `acct_1UZRHAJ8zQ8f9hgO`, via the temporary setup key `STRIPE_LIVE_SETUP_KEY_UCEKSEN`): products `prod_VcV7JXVd3LzsqI` (Rehber, `txcd_10302000`, €15 `price_1UbG6xJ8zQ8f9hgOL394U2IP`) and `prod_VcV7fPkwd1ZZhl` (Durum Analizi, `txcd_20060048`, €100 `price_1UbG6xJ8zQ8f9hgOO4vxy0kK`), both inclusive; tax settings inclusive + default `txcd_10302000`; NL registration `taxreg_1UbG6wJ8zQ8f9hgO1BsMHr39` (standard, small_seller, as sandbox); webhook `we_1UbG7FJ8zQ8f9hgOdwJp6GYq` → `https://uceksen.com/api/webhooks/stripe` (2 events), secret set as production `STRIPE_WEBHOOK_SECRET`. Live price ids in `[env.production.vars]`. Branding done by the user; Radar Lite; Stripe Tax on. Sandbox consultation description fixed (had lost its "+").
-- Note: test conversations on staging made before the split have `merhaba+…` reply addresses; replies to those now go to production's side, not staging.
-
-**Phase 9 — promo codes (2026-11-13, live in production via merge `e95494e`).**
-- `/admin/kodlar` ("Kodlar" in the admin nav): create a code (own or generated 8-char code; percent 1–100 or €1–200; Rehber / Durum Analizi / both; optional total use limit; optional last day, valid to the end of that day in `host_tz`), list active codes (from Stripe, `metadata.project = uceksen`), "Kapat" deactivates. Stripe holds everything: one coupon (`duration=once`, `applies_to.products`, name = "%N indirim"/"€N indirim", shown at Checkout) + one promotion code per code. Nothing in D1.
-- Conversation page: "İndirim kodu gönder" picks an active code and sends a ready Turkish email through the normal admin send (thread, signature, DEV_EMAIL guard) with the Rehber link and/or the conversation's payment link.
-- Checkout: `allow_promotion_codes` on both products. A 100% code gives a €0 order that Stripe completes with `payment_status = no_payment_required` (no payment intent): `isSettled` treats that as paid only when `amount_total = 0`, so the guide is delivered and the consultation booked. Cancelling a free booking refunds nothing (`refund_status` NULL; email: "ücretsiz olduğu için iade edilecek bir tutar yok").
-- New vars `STRIPE_PRODUCT_GUIDE` / `STRIPE_PRODUCT_CONSULT` (sandbox ids on staging, live ids in production). Stripe API version on both accounts is `2026-10-28.endive`: promotion codes take `promotion[type]=coupon&promotion[coupon]=…` (the old `coupon` param is rejected).
-- Verified against real Stripe: sandbox create/list/deactivate; live 100%-off session with automatic tax + invoice + terms consent → total 0 (probe objects removed).
-- **Open:** live restricted key "uceksen worker" can read promotion codes but lacks **Coupons: Write** (checked 2026-11-13) — creating codes in production fails until the user adds it (and Promotion Codes: Write). No redeploy needed.
-- **Found 2026-11-13:** the Stripe sandbox had lost its Terms of service URL (every staging checkout failed); the user set it again the same day. Staging test passed: `DENEME100` (sandbox, 100%, both products, 10 uses) → €0 guide order delivered.
+**Phase 10 — intake, reminders, summary** (started 2026-11-13, branch `staging`). Plan:
+1. Intake form `/randevu/{token}/onform` (6 questions, stored in `bookings.intake_json`), linked from the confirmation email and the booking page; editable until the call starts. Shown on the admin booking/conversation page.
+2. Reminder ~24 h before the call: hourly Cron Trigger, idempotent via a sent-marker on the booking; mentions the intake form if it is still empty.
+3. Written summary: admin writes it on the conversation page after the call → stored in the thread, emailed (normal admin send, DEV_EMAIL guard), `summary_sent_at` set.
+- **Waiting on the user:** approval of the Turkish intake questions (drafted 2026-11-13).
 
 ## Blocked on user
 
@@ -91,6 +80,23 @@ Not blocking, for later:
 | 13 | "Üç Eksen" calendar | ✅ in `gizemderinkok@gmail.com`; chosen after connecting |
 
 ## Completed
+
+**Phase 7 — environment split** (2026-11-13), on branch `staging`:
+- `wrangler.toml`: top level = staging Worker `uceksen` (unchanged resources, `staging.uceksen.com`, `REPLY_LOCAL = "staging"`); `[env.production]` = Worker `uceksen-production` with its own D1 `uceksen-db-production` (`5baf8445-…`), KV `b37ebc7f…`, R2 `uceksen-files-production`, `ENVIRONMENT = "production"`, `APP_URL = https://uceksen.com`, `REPLY_LOCAL = "merhaba"`, `routes = []` (explicit: routes are inherited otherwise and production would take `staging.uceksen.com`), `workers_dev = false`. Sandbox price ids until go-live.
+- CI: push to `staging` → tests → staging migrations → deploy top level; push to `main` → same with `--env production`. GitHub environments `staging` / `production`.
+- Inbound: both environments share `reply.uceksen.com`; `isForThisEnvironment` makes staging keep only `staging[+token]@` mail and production everything else except staging's. Tests added (190 total).
+- Production D1 migrated (0001–0006, settings row present). Production secrets set: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `ENCRYPTION_KEY` (new random), `ADMIN_EMAILS` (`gizem=gizemderinkok@gmail.com,baran=bbartu.demirci@gmail.com`, copied from `.dev.vars`). `STRIPE_SECRET_KEY` = restricted live key "uceksen worker" (Checkout Sessions, Charges and Refunds, Invoices — all write; `STRIPE_LIVE_KEY_UCEKSEN` in creds), set 2026-11-13. `RESEND_INBOUND_SECRET` from production Resend webhook `860977ab-9a52-4499-981a-ea5c532e42b6` → `https://uceksen.com/api/webhooks/resend` (`email.received`), set 2026-11-13. `DEV_EMAIL` not needed in production.
+- **Stripe live mirrored 2026-11-13** (account `acct_1UZRHAJ8zQ8f9hgO`, via the temporary setup key `STRIPE_LIVE_SETUP_KEY_UCEKSEN`): products `prod_VcV7JXVd3LzsqI` (Rehber, `txcd_10302000`, €15 `price_1UbG6xJ8zQ8f9hgOL394U2IP`) and `prod_VcV7fPkwd1ZZhl` (Durum Analizi, `txcd_20060048`, €100 `price_1UbG6xJ8zQ8f9hgOO4vxy0kK`), both inclusive; tax settings inclusive + default `txcd_10302000`; NL registration `taxreg_1UbG6wJ8zQ8f9hgO1BsMHr39` (standard, small_seller, as sandbox); webhook `we_1UbG7FJ8zQ8f9hgOdwJp6GYq` → `https://uceksen.com/api/webhooks/stripe` (2 events), secret set as production `STRIPE_WEBHOOK_SECRET`. Live price ids in `[env.production.vars]`. Branding done by the user; Radar Lite; Stripe Tax on. Sandbox consultation description fixed (had lost its "+").
+- Note: test conversations on staging made before the split have `merhaba+…` reply addresses; replies to those now go to production's side, not staging.
+
+**Phase 9 — promo codes (2026-11-13, live in production via merge `e95494e`).**
+- `/admin/kodlar` ("Kodlar" in the admin nav): create a code (own or generated 8-char code; percent 1–100 or €1–200; Rehber / Durum Analizi / both; optional total use limit; optional last day, valid to the end of that day in `host_tz`), list active codes (from Stripe, `metadata.project = uceksen`), "Kapat" deactivates. Stripe holds everything: one coupon (`duration=once`, `applies_to.products`, name = "%N indirim"/"€N indirim", shown at Checkout) + one promotion code per code. Nothing in D1.
+- Conversation page: "İndirim kodu gönder" picks an active code and sends a ready Turkish email through the normal admin send (thread, signature, DEV_EMAIL guard) with the Rehber link and/or the conversation's payment link.
+- Checkout: `allow_promotion_codes` on both products. A 100% code gives a €0 order that Stripe completes with `payment_status = no_payment_required` (no payment intent): `isSettled` treats that as paid only when `amount_total = 0`, so the guide is delivered and the consultation booked. Cancelling a free booking refunds nothing (`refund_status` NULL; email: "ücretsiz olduğu için iade edilecek bir tutar yok").
+- New vars `STRIPE_PRODUCT_GUIDE` / `STRIPE_PRODUCT_CONSULT` (sandbox ids on staging, live ids in production). Stripe API version on both accounts is `2026-10-28.endive`: promotion codes take `promotion[type]=coupon&promotion[coupon]=…` (the old `coupon` param is rejected).
+- Verified against real Stripe: sandbox create/list/deactivate; live 100%-off session with automatic tax + invoice + terms consent → total 0 (probe objects removed).
+- **Open:** live restricted key "uceksen worker" can read promotion codes but lacks **Coupons: Write** (checked 2026-11-13) — creating codes in production fails until the user adds it (and Promotion Codes: Write). No redeploy needed.
+- **Found 2026-11-13:** the Stripe sandbox had lost its Terms of service URL (every staging checkout failed); the user set it again the same day. Staging test passed: `DENEME100` (sandbox, 100%, both products, 10 uses) → €0 guide order delivered.
 
 **Phase 0 — Skeleton (2026-11-07)**
 - Hono app on Workers, TypeScript strict, `src/index.ts` → `/health` (checks D1 with `SELECT 1`, returns 503 if the DB is unreachable)
