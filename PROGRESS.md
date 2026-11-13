@@ -21,7 +21,7 @@
 | 5 | Booking (without Google) | ✅ | see `git log --grep 'phase 5'` |
 | 6 | Google Calendar | ✅ | `92ebc3c` (live test on staging passed 2026-11-11) |
 | S | Environment split: `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
-| 9 | Go live (prep list for the user, then the switch) | 🔄 live, user checks pending | `4991fad` |
+| 9 | Go live (prep list for the user, then the switch) | ✅ live 2026-11-13 (first live order delivered; remaining user checks under "Blocked on user") | `4991fad` |
 | P | Promo codes (Stripe) from admin, sent via the admin email flow | ✅ live 2026-11-13 (staging test passed: 100% code → €0 guide order delivered) | `e95494e` |
 | 7 | Intake, reminders, summary | ⬜ | — |
 | 8 | Cleanup and resilience | ⬜ | — |
@@ -83,9 +83,9 @@ Not blocking, for later:
 | 6 | Resend account + key | ✅ account `baran@uceksen.com`; full-access key in `~/.gizem-creds` as `RESEND_API_KEY_UCEKSEN` → `RESEND_API_KEY` in `.dev.vars` + Worker secret |
 | 7 | Company details | ✅ Back of the Envelope B.V., Keizersgracht 520H, 1017EK Amsterdam, Netherlands · KvK 97838810 · BTW NL868254010B01 · court city still unknown |
 | 8 | `DEV_EMAIL` | ✅ `bbartu.demirci@gmail.com` |
-| 9 | Stripe account (isolated, KYC) | 🟨 live `acct_1UZRHAJ8zQ8f9hgO` created (KYC/activation at go-live); sandbox "Üç Eksen sandbox" `acct_1UZRHhJguQXFmVyO` used for the build |
+| 9 | Stripe account (isolated, KYC) | ✅ live `acct_1UZRHAJ8zQ8f9hgO` activated 2026-11-13; sandbox "Üç Eksen sandbox" `acct_1UZRHhJguQXFmVyO` used for the build |
 | 10 | Stripe test key | ✅ full sandbox secret key (user's choice over restricted) in `~/.gizem-creds` as `STRIPE_SECRET_KEY_UCEKSEN` → `.dev.vars` + Worker secret `STRIPE_SECRET_KEY` |
-| 11 | Guide PDF | 🟨 placeholder `0.1` in use; real PDF uploaded by the user via `/admin/rehber` |
+| 11 | Guide PDF | ✅ v1.0 uploaded in production via `/admin/rehber` |
 | 12 | GCP project + OAuth client | ✅ 2026-11-10, see "Blocked on user" |
 | 13 | "Üç Eksen" calendar | ✅ in `gizemderinkok@gmail.com`; chosen after connecting |
 
