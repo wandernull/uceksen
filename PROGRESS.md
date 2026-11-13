@@ -25,6 +25,7 @@
 | 9 | Promo codes (Stripe) from admin, sent via the admin email flow | ✅ live 2026-11-13 (staging test passed: 100% code → €0 guide order delivered) | `e95494e` |
 | 10 | Intake, reminders, summary | ⬜ | — |
 | 11 | Cleanup and resilience | ⬜ | — |
+| 12 | AI summary draft: admin pastes call notes/transcript → Claude API drafts a structured Turkish summary (with intake answers + thread) → admin edits → sends via the Phase 10 summary flow | ⬜ after 11 | — |
 
 **Renumbered 2026-11-13 to match the order actually done.** Old → new: S → 7, 9 → 8, P → 9, 7 → 10, 8 → 11. Commits before this use the old names (`phase S`, `phase 9`, `phase P`); SPEC §9 keeps its original headings, with a note mapping them to these numbers. After Phase 11 everything is a new feature on live.
 
@@ -171,6 +172,7 @@ Not blocking, for later:
 
 ## Decisions made
 
+- **2026-11-13 — AI-drafted summaries are a separate Phase 12, after Phase 11.** Phase 10 ships the manual written summary as SPEC describes. Phase 12 adds a draft step on top: admin pastes notes or a transcript, the Claude API returns a structured Turkish draft, the admin edits it and sends it through the Phase 10 flow; nothing is sent without a human. Needs `ANTHROPIC_API_KEY` per environment and a privacy-policy line naming Anthropic as a subprocessor. Automatic transcription (recording + Whisper) is out of scope: needs recording consent and audio storage; Meet transcripts need paid Workspace.
 > Anything that deviates from `SPEC.md`, or that the spec did not cover, goes here with the reasoning.
 
 - **2026-11-07 — Single deployed environment.** User does not want staging + production. One Worker (`uceksen`) on `uceksen.gizemderinkok.workers.dev` until the domain is handed over. Locally: `wrangler dev`. Replaces SPEC §3 three-environment table.
