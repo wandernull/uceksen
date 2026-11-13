@@ -5,6 +5,8 @@ import { requireAdmin } from "../../lib/admin-auth";
 import { attachmentsFor, formatSize, serveAttachment } from "../../lib/attachments";
 import { cancelBooking, loadIntent, offerConsult, paymentUrl, retryGoogle } from "../../lib/booking";
 import { conversationUrl, deliverMessage, sendOutgoing } from "../../lib/conversations";
+import { getPromo, listPromos, promoBody } from "../../lib/promo";
+import { promoMeta } from "./promos";
 import { formatEur } from "../../lib/guide";
 import { formatSlot } from "../../lib/slots";
 import { getHostTz } from "../../lib/settings";
@@ -126,7 +128,11 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
          FROM messages WHERE conversation_id = ?1 ORDER BY created_at, id`,
     ).bind(id).all<Msg>(),
   ]);
-  const [atts, consult] = await Promise.all([attachmentsFor(c.env.DB, id), consultFor(c.env.DB, id)]);
+  const [atts, consult, promos] = await Promise.all([
+    attachmentsFor(c.env.DB, id),
+    consultFor(c.env.DB, id),
+    listPromos(c.env).catch((e) => (console.error("listing promotion codes failed", e), null)),
+  ]);
   if (!conv) return c.text("Konuşma bulunamadı.", 404);
   const me = c.get("admin");
   const saved = c.req.query("kaydedildi") === "1";
@@ -212,6 +218,27 @@ admin.get("/konusma/:id{[0-9]+}", async (c) => {
               <textarea id="metin" name="metin" rows={8} required maxlength={REPLY_MAX}></textarea>
               <button class="btn" type="submit">Gönder</button>
             </form>
+          </section>
+
+          <section id="kod">
+            <h2>İndirim kodu gönder</h2>
+            {c.req.query("kod") === "1" && <p class="note" role="status">Kod gönderildi.</p>}
+            {c.req.query("kod") === "0" && <p class="form-error" role="alert">Mesaj kaydedildi ama gönderilemedi. Yukarıdan tekrar gönderebilirsin.</p>}
+            {promos === null ? (
+              <p class="form-error" role="alert">Kodlar Stripe'tan alınamadı.</p>
+            ) : promos.length === 0 ? (
+              <p class="small">Aktif kod yok. <a href="/admin/kodlar">Kod oluştur →</a></p>
+            ) : (
+              <form class="form-stack" method="post" action={`/admin/konusma/${conv.id}/kod`}>
+                <label for="kod-sec">Kod <span class="opt">(hazır bir e-postayla {conv.email} adresine gider, imza: {me.author === "gizem" ? "Gizem" : "Baran"})</span></label>
+                <select id="kod-sec" name="kod">
+                  {promos.map((p) => (
+                    <option value={p.id}>{p.code} — {promoMeta(p, tz)}</option>
+                  ))}
+                </select>
+                <button class="btn-ghost" type="submit">Kodu gönder</button>
+              </form>
+            )}
           </section>
         </AdminLayout>
       ),
@@ -374,6 +401,29 @@ admin.post("/konusma/:id{[0-9]+}/yanit", async (c) => {
   if (!exists) return c.text("Konuşma bulunamadı.", 404);
   const { sent } = await sendOutgoing(c.env, id, c.get("admin").author, text, { via: "admin", nextState: "theirs" });
   return c.redirect(`/admin/konusma/${id}?gonderildi=${sent ? 1 : 0}#yanit`, 303);
+});
+
+admin.post("/konusma/:id{[0-9]+}/kod", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await c.req.parseBody();
+  const promoId = typeof body.kod === "string" ? body.kod : "";
+  if (!/^promo_[A-Za-z0-9]+$/.test(promoId)) return c.text("Geçersiz kod.", 400);
+  const conv = await c.env.DB.prepare(
+    "SELECT c.reply_token, ct.name FROM conversations c JOIN contacts ct ON ct.id = c.contact_id WHERE c.id = ?1",
+  ).bind(id).first<{ reply_token: string; name: string | null }>();
+  if (!conv) return c.text("Konuşma bulunamadı.", 404);
+  const promo = await getPromo(c.env, promoId);
+  if (!promo?.active) return c.text("Bu kod artık aktif değil.", 409);
+  const tz = await getHostTz(c.env.DB);
+  const text = promoBody({
+    name: conv.name,
+    promo,
+    guideUrl: `${c.env.APP_URL}/rehber`,
+    paymentUrl: paymentUrl(c.env, conv.reply_token),
+    expires: promo.expiresAt ? formatTr(promo.expiresAt, tz).replace(/ \d\d:\d\d$/, "") : null,
+  });
+  const { sent } = await sendOutgoing(c.env, id, c.get("admin").author, text, { via: "admin", nextState: "theirs" });
+  return c.redirect(`/admin/konusma/${id}?kod=${sent ? 1 : 0}#kod`, 303);
 });
 
 admin.post("/mesaj/:id{[0-9]+}/tekrar", async (c) => {

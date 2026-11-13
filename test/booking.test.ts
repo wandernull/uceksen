@@ -284,6 +284,24 @@ describe("reschedule and cancel", () => {
     expect(st!.state).toBe("ours");
   });
 
+  it("a free booking (100% code): booked normally, cancelling refunds nothing and says so", async () => {
+    const email = `ucretsiz${++n}@example.com`;
+    const conv = await newConversation(email);
+    await form(`/admin/konusma/${conv.id}/odeme`, {});
+    const s = consultSession(conv.id, email, { payment_status: "no_payment_required", amount_total: 0, payment_intent: null });
+    expect(await (await postStripe({ type: "checkout.session.completed", data: { object: s } })).json()).toMatchObject({ result: "created" });
+    const intent = (await env.DB.prepare("SELECT token, id FROM booking_intents WHERE stripe_session_id = ?1").bind(s.id).first<{ token: string; id: number }>())!;
+    const { res } = await book(intent.token);
+    expect(res.status).toBe(303);
+    fake.reset();
+    fakeStripe.refunds = [];
+    await form(`/randevu/${intent.token}/degistir`, { islem: "iptal", onay: "on", tz: "Europe/Istanbul" });
+    expect(await bookingOf(intent.id)).toMatchObject({ state: "cancelled", refund_status: null });
+    expect(fakeStripe.refunds).toHaveLength(0);
+    expect(fake.sent.find((m) => m.text.includes("iptal edildi"))!.text).toContain("ücretsiz olduğu için iade edilecek bir tutar yok");
+    expect(fake.sent.find((m) => m.subject.includes("Randevu iptal"))!.text).toContain("gerekmiyor");
+  });
+
   it("an admin cancellation always refunds, even inside 48 h", async () => {
     const { s, token, intentId, conv } = await paidCustomer();
     await book(token);

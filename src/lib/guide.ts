@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import { conversationUrl, deliverMessage, notifyAdmins, sendOutgoing } from "./conversations";
-import { retrieveInvoice, type CheckoutSession } from "./stripe";
+import { isSettled, retrieveInvoice, type CheckoutSession } from "./stripe";
 import { nowIso } from "./time";
 import { randomMailToken, randomToken } from "./tokens";
 
@@ -88,7 +88,7 @@ export type FulfillResult = "created" | "duplicate" | "ignored" | "unpaid";
  */
 export async function fulfillGuide(env: GuideEnv, s: CheckoutSession): Promise<FulfillResult> {
   if (s.metadata?.project !== "uceksen" || s.metadata?.kind !== "guide" || s.mode !== "payment") return "ignored";
-  if (s.payment_status !== "paid") return "unpaid";
+  if (!isSettled(s)) return "unpaid";
   const email = s.customer_details?.email?.trim().toLowerCase();
   if (!email) throw new Error(`checkout session ${s.id} has no customer email`);
 

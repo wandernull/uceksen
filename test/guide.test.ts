@@ -188,7 +188,17 @@ describe("POST /api/webhooks/stripe", () => {
     }
     const unpaid = await postStripe(completed(session({ payment_status: "unpaid" })));
     expect(await unpaid.json()).toMatchObject({ result: "unpaid" });
+    // "No payment required" only counts when the total really is zero.
+    const odd = await postStripe(completed(session({ payment_status: "no_payment_required", amount_total: 1500 })));
+    expect(await odd.json()).toMatchObject({ result: "unpaid" });
     expect(await purchaseCount()).toBe(before);
+  });
+
+  it("delivers a free order (100% discount code: no_payment_required, no payment intent)", async () => {
+    const { p } = await buy({ payment_status: "no_payment_required", amount_total: 0, payment_intent: null });
+    expect(p).toMatchObject({ amount_cents: 0, stripe_payment_intent: null });
+    expect(p.token).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(fake.sent.some((m) => m.text.includes(`/d/${p.token}`))).toBe(true);
   });
 
   it("records the purchase, creates a 7-day/5-download token and emails the link with the invoice (to DEV_EMAIL)", async () => {

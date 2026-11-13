@@ -22,7 +22,7 @@
 | 6 | Google Calendar | ✅ | `92ebc3c` (live test on staging passed 2026-11-11) |
 | S | Environment split: `staging` branch → staging, `main` → production Worker | ✅ | `9ac82e7`…`efd0b0c` |
 | 9 | Go live (prep list for the user, then the switch) | 🔄 live, user checks pending | `4991fad` |
-| P | Promo codes (Stripe) from admin, sent via the admin email flow | ⬜ | — |
+| P | Promo codes (Stripe) from admin, sent via the admin email flow | 🔄 on staging, user test pending | see `git log --grep 'phase P'` |
 | 7 | Intake, reminders, summary | ⬜ | — |
 | 8 | Cleanup and resilience | ⬜ | — |
 
@@ -42,7 +42,14 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 - **Stripe live mirrored 2026-11-13** (account `acct_1UZRHAJ8zQ8f9hgO`, via the temporary setup key `STRIPE_LIVE_SETUP_KEY_UCEKSEN`): products `prod_VcV7JXVd3LzsqI` (Rehber, `txcd_10302000`, €15 `price_1UbG6xJ8zQ8f9hgOL394U2IP`) and `prod_VcV7fPkwd1ZZhl` (Durum Analizi, `txcd_20060048`, €100 `price_1UbG6xJ8zQ8f9hgOO4vxy0kK`), both inclusive; tax settings inclusive + default `txcd_10302000`; NL registration `taxreg_1UbG6wJ8zQ8f9hgO1BsMHr39` (standard, small_seller, as sandbox); webhook `we_1UbG7FJ8zQ8f9hgOdwJp6GYq` → `https://uceksen.com/api/webhooks/stripe` (2 events), secret set as production `STRIPE_WEBHOOK_SECRET`. Live price ids in `[env.production.vars]`. Branding done by the user; Radar Lite; Stripe Tax on. Sandbox consultation description fixed (had lost its "+").
 - Note: test conversations on staging made before the split have `merhaba+…` reply addresses; replies to those now go to production's side, not staging.
 
-**Phase P — promo codes (after go-live).** In admin: create a Stripe promotion code (percent or amount off, product scope guide/consultation, expiry, max redemptions), list/deactivate codes, and send a code to a customer from the conversation using the existing admin email flow. Checkout sessions allow promotion codes. Details agreed with the user when the phase starts.
+**Phase P — promo codes (2026-11-13, on `staging`).**
+- `/admin/kodlar` ("Kodlar" in the admin nav): create a code (own or generated 8-char code; percent 1–100 or €1–200; Rehber / Durum Analizi / both; optional total use limit; optional last day, valid to the end of that day in `host_tz`), list active codes (from Stripe, `metadata.project = uceksen`), "Kapat" deactivates. Stripe holds everything: one coupon (`duration=once`, `applies_to.products`, name = "%N indirim"/"€N indirim", shown at Checkout) + one promotion code per code. Nothing in D1.
+- Conversation page: "İndirim kodu gönder" picks an active code and sends a ready Turkish email through the normal admin send (thread, signature, DEV_EMAIL guard) with the Rehber link and/or the conversation's payment link.
+- Checkout: `allow_promotion_codes` on both products. A 100% code gives a €0 order that Stripe completes with `payment_status = no_payment_required` (no payment intent): `isSettled` treats that as paid only when `amount_total = 0`, so the guide is delivered and the consultation booked. Cancelling a free booking refunds nothing (`refund_status` NULL; email: "ücretsiz olduğu için iade edilecek bir tutar yok").
+- New vars `STRIPE_PRODUCT_GUIDE` / `STRIPE_PRODUCT_CONSULT` (sandbox ids on staging, live ids in production). Stripe API version on both accounts is `2026-10-28.endive`: promotion codes take `promotion[type]=coupon&promotion[coupon]=…` (the old `coupon` param is rejected).
+- Verified against real Stripe: sandbox create/list/deactivate; live 100%-off session with automatic tax + invoice + terms consent → total 0 (probe objects removed).
+- **Before merging to production:** add **Coupons: Write** and **Promotion Codes: Write** to the live restricted key "uceksen worker" (otherwise `/admin/kodlar` can't reach Stripe in production).
+- **Found 2026-11-13:** the Stripe **sandbox** has no Terms of service URL anymore, so every staging checkout fails ("You cannot collect consent to your terms of service unless a URL is set"). User sets it in the sandbox: Settings → Business → Public details (same four URLs as live).
 
 ## Blocked on user
 
@@ -225,6 +232,7 @@ Not blocking, for later:
 
 - **2026-11-10 — Consultation €100 (was €200); launch prices, no strikethrough.** User asked for crossed-out "was" prices (~~€30~~ €15, ~~€200~~ €100). Not done: under the EU Price Indication Directive art. 6a (Omnibus, ACM in NL) a crossed-out price must be the lowest price actually charged in the previous 30 days, and neither was ever charged. Instead (user's choice): "Lansman fiyatı. 1 Şubat 2027'den itibaren €30 / €200" under the price on `/rehber`, `/danismanlik`, the payment page and the terms. The home page shows no prices. Sandbox consult price now `price_1UaLI4JguQXFmVyOT5C8HrYe` (€100, inclusive); the €200 price is archived.
 
+- **2026-11-13 — Promo codes live in Stripe only, no D1 table.** Stripe already stores redemptions, limits and expiry; a copy would drift. Codes are scoped to products via coupon `applies_to`, single use per order (`duration=once`). €0 orders are accepted only as `no_payment_required` with a zero total.
 - **2026-11-13 — Went live.** Switch done by A after the user's go: production Resend webhook `860977ab-…` + secret, `uceksen.com` route on `[env.production]`, fast-forward merge `staging` → `main` (`4991fad`), CI deployed production. Checks passed: `/health` production + DB, all public pages/sitemap/llms.txt/og.png 200, robots.txt production rules + sitemap, `/admin/` → Access login, both webhooks 401 unsigned, www → apex 301, staging still healthy. Guide purchase answers 503 until a guide version exists in production (intended).
 - **2026-11-13 — Production `routes = []` explicit; no `www` on the Worker.** Wrangler inherits top-level routes into environments, which would move `staging.uceksen.com` to production. `www` is redirected by a Cloudflare redirect rule, not served by the Worker (static assets would otherwise be served twice, and `/admin` on `www` is outside Access).
 - **2026-11-13 — Separate staging and production; revised phase order (user decision).** Reverses the 2026-11-07 single-deployment decision: going live while Phases 7–8 continue needs a place to test that isn't production. Branches: work goes to `staging` (deploys staging); `main` gets merges from `staging` only with the user's green light (deploys production on `uceksen.com`). Order: S (split) → 9 (go live) → P (promo codes) → 7 → 8; afterwards everything is a new feature on live. Phase commits now land on `staging` and reach `main` by merge.

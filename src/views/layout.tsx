@@ -87,7 +87,7 @@ export function MessagePage(props: { title: string; eyebrow: string; heading: st
   );
 }
 
-const ADMIN_NAV = [["/admin/", "Konuşmalar"], ["/admin/takvim", "Takvim"], ["/admin/rehber", "Rehber"], ["/admin/eslesmeyen", "Eşleşmeyen"]] as const;
+const ADMIN_NAV = [["/admin/", "Konuşmalar"], ["/admin/takvim", "Takvim"], ["/admin/rehber", "Rehber"], ["/admin/kodlar", "Kodlar"], ["/admin/eslesmeyen", "Eşleşmeyen"]] as const;
 
 export function AdminLayout({ title, current, adminName, children }: { title: string; current: string; adminName: string; children: Child }) {
   return (

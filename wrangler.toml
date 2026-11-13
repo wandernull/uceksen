@@ -46,9 +46,11 @@ MAIL_FROM = "Üç Eksen <merhaba@uceksen.com>"
 MAIL_DOMAIN = "uceksen.com"
 REPLY_LOCAL = "staging"
 REPLY_DOMAIN = "reply.uceksen.com"
-# Stripe sandbox prices.
+# Stripe sandbox prices, and the products discount codes apply to.
 STRIPE_PRICE_GUIDE = "price_1UZUGsJguQXFmVyOe5dbLWcY"
 STRIPE_PRICE_CONSULT = "price_1UaLI4JguQXFmVyOT5C8HrYe"
+STRIPE_PRODUCT_GUIDE = "prod_VafcUBOU4v6dXg"
+STRIPE_PRODUCT_CONSULT = "prod_VafccJ4Zqsasad"
 # Secrets per environment (wrangler secret put [--env production]): ADMIN_EMAILS
 # ("gizem=a@x.com,baran=b@y.com"), DEV_EMAIL, RESEND_API_KEY, RESEND_INBOUND_SECRET,
 # STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
@@ -96,6 +98,8 @@ REPLY_DOMAIN = "reply.uceksen.com"
 # Live Stripe prices (account acct_1UZRHAJ8zQ8f9hgO, created 2026-11-13).
 STRIPE_PRICE_GUIDE = "price_1UbG6xJ8zQ8f9hgOL394U2IP"
 STRIPE_PRICE_CONSULT = "price_1UbG6xJ8zQ8f9hgOO4vxy0kK"
+STRIPE_PRODUCT_GUIDE = "prod_VcV7JXVd3LzsqI"
+STRIPE_PRODUCT_CONSULT = "prod_VcV7fPkwd1ZZhl"
 
 [[env.production.d1_databases]]
 binding = "DB"

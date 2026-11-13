@@ -5,7 +5,7 @@ import { googleBusy, GoogleError, googleProblem, syncBookingEvent, type GoogleEn
 import { formatEur } from "./guide";
 import { loadAvailability } from "./settings";
 import { computeSlots, formatSlot, isoUtc, SESSION_MINUTES } from "./slots";
-import { refundPayment, retrieveInvoice, type CheckoutSession } from "./stripe";
+import { isSettled, refundPayment, retrieveInvoice, type CheckoutSession } from "./stripe";
 import { nowIso } from "./time";
 import { randomToken } from "./tokens";
 
@@ -74,7 +74,7 @@ export type ConsultResult = { result: "created" | "duplicate" | "ignored" | "unp
  */
 export async function fulfillConsult(env: BookingEnv, s: CheckoutSession): Promise<ConsultResult> {
   if (s.metadata?.project !== "uceksen" || s.metadata?.kind !== "consult" || s.mode !== "payment") return { result: "ignored" };
-  if (s.payment_status !== "paid") return { result: "unpaid" };
+  if (!isSettled(s)) return { result: "unpaid" };
   const db = env.DB;
   const existing = await db.prepare("SELECT token FROM booking_intents WHERE stripe_session_id = ?1").bind(s.id).first<{ token: string }>();
   if (existing) return { result: "duplicate", token: existing.token };
@@ -382,8 +382,9 @@ export async function rescheduleBooking(
 
 // --- 5. Cancel -----------------------------------------------------------------------------------
 
-export function cancelBody(p: { name: string | null; start: string; tz: string; by: "customer" | "admin"; refund: "refunded" | "not_eligible" | "failed"; amount: string }): string {
+export function cancelBody(p: { name: string | null; start: string; tz: string; by: "customer" | "admin"; refund: "refunded" | "not_eligible" | "failed" | "free"; amount: string }): string {
   const refund = {
+    free: "Görüşme ücretsiz olduğu için iade edilecek bir tutar yok.",
     refunded: `${p.amount} ödediğin yönteme iade edildi. Hesabına geçmesi 5–10 iş günü sürebilir.`,
     not_eligible: `Görüşmeye ${CONSULT.refundHours} saatten az kaldığı için satış koşullarına göre iade yapılmadı.`,
     failed: "İade işlemini başlatırken bir sorun oldu; birkaç gün içinde elle yapıp sana yazacağız.",
@@ -411,7 +412,7 @@ export async function cancelBooking(
   booking: Booking,
   by: "customer" | "admin",
   adminAuthor?: Author,
-): Promise<{ ok: true; refund: "refunded" | "not_eligible" | "failed" } | { ok: false }> {
+): Promise<{ ok: true; refund: "refunded" | "not_eligible" | "failed" | "free" } | { ok: false }> {
   const now = DateTime.utc();
   const p = policy(booking, now);
   if (!p.canCancel) return { ok: false };
@@ -422,9 +423,11 @@ export async function cancelBooking(
   ).bind(nowIso(), by, booking.id).run();
   if (!res.meta.changes) return { ok: false };
 
-  let refund: "refunded" | "not_eligible" | "failed" = "not_eligible";
+  // "free": paid nothing (100% discount code), so there is nothing to refund. Stored as NULL.
+  const free = (intent.amount_cents ?? 0) === 0 && !intent.stripe_payment_intent;
+  let refund: "refunded" | "not_eligible" | "failed" | "free" = free ? "free" : "not_eligible";
   let refundId: string | null = null;
-  if (eligible) {
+  if (eligible && !free) {
     try {
       if (!intent.stripe_payment_intent) throw new Error("no payment intent on booking intent");
       refundId = (await refundPayment(env, intent.stripe_payment_intent, `uceksen-refund-booking-${booking.id}`)).id;
@@ -436,7 +439,7 @@ export async function cancelBooking(
   }
   const g = await syncBookingEvent(env, booking.id);
   await env.DB.batch([
-    env.DB.prepare("UPDATE bookings SET refund_status = ?1, stripe_refund_id = ?2 WHERE id = ?3").bind(refund, refundId, booking.id),
+    env.DB.prepare("UPDATE bookings SET refund_status = ?1, stripe_refund_id = ?2 WHERE id = ?3").bind(refund === "free" ? null : refund, refundId, booking.id),
     env.DB.prepare("UPDATE conversations SET state = ?1 WHERE id = ?2").bind(refund === "failed" ? "ours" : "closed", intent.conversation_id),
   ]);
   const amount = formatEur(intent.amount_cents ?? 0, intent.currency ?? "eur");
@@ -449,7 +452,7 @@ export async function cancelBooking(
     "",
     intent.name ? `${intent.name} <${intent.email}>` : intent.email,
     `Tarih: ${when(booking.start_utc, await hostTz(env.DB))}`,
-    `İade: ${{ refunded: `yapıldı (${amount})`, not_eligible: "yok (48 saatten az kalmıştı)", failed: "BAŞARISIZ — Stripe panelinden elle yap" }[refund]}`,
+    `İade: ${{ refunded: `yapıldı (${amount})`, not_eligible: "yok (48 saatten az kalmıştı)", failed: "BAŞARISIZ — Stripe panelinden elle yap", free: "gerekmiyor (indirim koduyla ücretsizdi)" }[refund]}`,
     ...(g.status === "failed" ? ["", `Google Takvim'deki etkinlik silinemedi (${g.error ?? ""}); elle sil.`] : []),
     "",
     `Aç: ${env.APP_URL}/admin/konusma/${intent.conversation_id}`,

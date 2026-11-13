@@ -5,21 +5,21 @@ export const stripeApi: { fetch: (url: string, init?: RequestInit) => Promise<Re
   fetch: (url, init) => fetch(url, init),
 };
 
-type Params = { [k: string]: string | number | boolean | null | undefined | Params | Params[] };
+type Params = { [k: string]: string | number | boolean | null | undefined | Params | Params[] | string[] };
 
 /** Stripe's form encoding: nested objects become a[b][c]=v. */
 export function formEncode(params: Params, prefix = "", out = new URLSearchParams()): URLSearchParams {
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null) continue;
     const key = prefix ? `${prefix}[${k}]` : k;
-    if (Array.isArray(v)) v.forEach((item, i) => formEncode(item, `${key}[${i}]`, out));
+    if (Array.isArray(v)) v.forEach((item, i) => (typeof item === "object" ? formEncode(item, `${key}[${i}]`, out) : out.append(`${key}[${i}]`, String(item))));
     else if (typeof v === "object") formEncode(v, key, out);
     else out.append(key, String(v));
   }
   return out;
 }
 
-async function call<T>(env: Pick<Env, "STRIPE_SECRET_KEY">, method: "GET" | "POST", path: string, params?: Params): Promise<T> {
+export async function stripeCall<T>(env: Pick<Env, "STRIPE_SECRET_KEY">, method: "GET" | "POST" | "DELETE", path: string, params?: Params): Promise<T> {
   const res = await stripeApi.fetch(API + path, {
     method,
     headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Content-Type": "application/x-www-form-urlencoded" },
@@ -45,6 +45,14 @@ const BRANDING = {
 const TERMS_TEXT = (url: string) =>
   `[Satış koşullarını](${url}/satis-kosullari) kabul ediyorum. Rehberin hemen teslim edilmesini onaylıyor, bu nedenle cayma hakkımı kaybettiğimi kabul ediyorum.`;
 
+/**
+ * Paid, or free because a 100% discount code brought the total to zero (Stripe then
+ * reports "no_payment_required" and there is no payment intent).
+ */
+export function isSettled(s: Pick<CheckoutSession, "payment_status" | "amount_total">): boolean {
+  return s.payment_status === "paid" || (s.payment_status === "no_payment_required" && (s.amount_total ?? 0) === 0);
+}
+
 export type CheckoutSession = {
   id: string;
   url: string | null;
@@ -66,9 +74,10 @@ export async function createGuideCheckout(
   env: Pick<Env, "STRIPE_SECRET_KEY" | "STRIPE_PRICE_GUIDE" | "APP_URL">,
 ): Promise<CheckoutSession> {
   const meta = { project: "uceksen", kind: "guide" };
-  return call<CheckoutSession>(env, "POST", "/checkout/sessions", {
+  return stripeCall<CheckoutSession>(env, "POST", "/checkout/sessions", {
     mode: "payment",
     line_items: [{ price: env.STRIPE_PRICE_GUIDE, quantity: 1 }],
+    allow_promotion_codes: true,
     automatic_tax: { enabled: true },
     // In the EU the withdrawal-right waiver for digital content needs this explicit consent.
     consent_collection: { terms_of_service: "required" },
@@ -87,7 +96,7 @@ export async function retrieveInvoice(
   env: Pick<Env, "STRIPE_SECRET_KEY">,
   id: string,
 ): Promise<{ id: string; hosted_invoice_url: string | null; number: string | null }> {
-  return call(env, "GET", `/invoices/${encodeURIComponent(id)}`);
+  return stripeCall(env, "GET", `/invoices/${encodeURIComponent(id)}`);
 }
 
 // --- Webhook signatures -------------------------------------------------------------
@@ -138,9 +147,10 @@ export async function createConsultCheckout(
   p: { conversationId: number; email: string; replyToken: string },
 ): Promise<CheckoutSession> {
   const meta = { project: "uceksen", kind: "consult", conversation_id: String(p.conversationId) };
-  return call<CheckoutSession>(env, "POST", "/checkout/sessions", {
+  return stripeCall<CheckoutSession>(env, "POST", "/checkout/sessions", {
     mode: "payment",
     line_items: [{ price: env.STRIPE_PRICE_CONSULT, quantity: 1 }],
+    allow_promotion_codes: true,
     customer_email: p.email,
     automatic_tax: { enabled: true },
     consent_collection: { terms_of_service: "required" },
@@ -156,7 +166,7 @@ export async function createConsultCheckout(
 }
 
 export async function retrieveCheckoutSession(env: Pick<Env, "STRIPE_SECRET_KEY">, id: string): Promise<CheckoutSession> {
-  return call(env, "GET", `/checkout/sessions/${encodeURIComponent(id)}`);
+  return stripeCall(env, "GET", `/checkout/sessions/${encodeURIComponent(id)}`);
 }
 
 /** Full refund of a payment. The idempotency key makes a retried call refund only once. */
