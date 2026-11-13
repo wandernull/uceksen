@@ -3,9 +3,9 @@
 > Maintained by the agent. First action of every session: read this file. Update it at the end of every phase.
 > When the user returns after a break, this file tells them where things stand.
 
-**Last updated:** 2026-11-13
+**Last updated:** 2026-11-13 (live)
 **Active phase:** 9 — Go live
-**Status:** 🟢 **LIVE on https://uceksen.com since 2026-11-13** (production Worker `uceksen-production`, `main` @ `e95494e`, incl. Phase P). Waiting for the user's post-switch steps (section B4 + C below). Then Phase P.
+**Status:** 🟢 **LIVE on https://uceksen.com since 2026-11-13** (production Worker `uceksen-production`, `main` @ `e95494e`, incl. Phase P). First live order (free, via code) delivered. Remaining post-switch steps under "Blocked on user". Next build phase: 7.
 
 ---
 
@@ -49,16 +49,18 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 - New vars `STRIPE_PRODUCT_GUIDE` / `STRIPE_PRODUCT_CONSULT` (sandbox ids on staging, live ids in production). Stripe API version on both accounts is `2026-10-28.endive`: promotion codes take `promotion[type]=coupon&promotion[coupon]=…` (the old `coupon` param is rejected).
 - Verified against real Stripe: sandbox create/list/deactivate; live 100%-off session with automatic tax + invoice + terms consent → total 0 (probe objects removed).
 - **Open:** live restricted key "uceksen worker" can read promotion codes but lacks **Coupons: Write** (checked 2026-11-13) — creating codes in production fails until the user adds it (and Promotion Codes: Write). No redeploy needed.
-- **Found 2026-11-13:** the Stripe **sandbox** has no Terms of service URL anymore, so every staging checkout fails ("You cannot collect consent to your terms of service unless a URL is set"). User sets it in the sandbox: Settings → Business → Public details (same four URLs as live).
+- **Found 2026-11-13:** the Stripe sandbox had lost its Terms of service URL (every staging checkout failed); the user set it again the same day. Staging test passed: `DENEME100` (sandbox, 100%, both products, 10 uses) → €0 guide order delivered.
 
 ## Blocked on user
 
-Post-switch steps on `https://uceksen.com/admin/` (Phase 9 B4 + C):
-1. Upload the real guide PDF at `/admin/rehber` (until then "Satın al" shows the "yakında" page, 503 — by design).
-2. Working hours + rules at `/admin/takvim`.
-3. Gizem connects Google (`gizemderinkok@gmail.com`), checks booking calendar "Üç Eksen" + busy calendars.
-4. Real tests: guide purchase → download → refund; consultation purchase → booking → Meet event + `.ics` → cancel (>48 h) → refund; contact form → admin reply → email reply lands in the thread; link preview.
-5. Delete the Stripe setup key (dashboard + `STRIPE_LIVE_SETUP_KEY_UCEKSEN` in creds).
+Production post-switch steps (Phase 9 B4 + C), state 2026-11-13:
+1. ✅ Guide PDF uploaded in production (`v1.0`, current).
+2. ✅ Live guide order with a 100% code (`TEST5NVRD2`, 2 uses, expires 2026-11-20; created via the setup key): €0 purchase #1 recorded, delivery email sent without `[TEST]`. **Close the code at `/admin/kodlar` after testing.**
+3. ⬜ Working hours + rules at `/admin/takvim` (production).
+4. ⬜ Gizem connects Google (`gizemderinkok@gmail.com`) in production; check booking calendar "Üç Eksen" + busy calendars.
+5. ⬜ Real paid tests: guide €15 → refund in Stripe; consultation → booking → Meet event + `.ics` → cancel (>48 h) → automatic refund; contact form → admin reply → email reply lands in the production thread; link preview.
+6. ⬜ Live Stripe key "uceksen worker": add **Coupons: Write** + **Promotion Codes: Write** (creating codes from `/admin/kodlar` in production fails until then).
+7. ⬜ Delete the Stripe setup key (dashboard + `STRIPE_LIVE_SETUP_KEY_UCEKSEN` in creds) once 6 is done and no more API setup is needed.
 
 Google preparation (done 2026-11-10): GCP project `uceksen` under `baran@botelabs.io`, Calendar API on, consent screen External + **In production** (unverified; fine for one user), scopes `calendar.events`, `calendar.freebusy`, `calendar.calendarlist.readonly`, no logo (a logo forces verification). Authorized domains `uceksen.com` + `gizemderinkok.workers.dev`; homepage/privacy/terms links point at `uceksen.com`. Web client `uceksen-web` with redirect URIs for workers.dev, `uceksen.com` and `localhost:8787` (`/admin/google/callback`). Client id/secret in `~/.gizem-creds` (`GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`) → `.dev.vars` + Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; `ENCRYPTION_KEY` generated separately for local and the Worker. "Üç Eksen" calendar created; Baran's calendar shared free/busy with Gizem.
 
@@ -276,6 +278,8 @@ Production = Worker `uceksen-production` (branch `main`), already created with i
 - 1 Feb 2027: launch prices end (see Known issues).
 
 ## Known issues
+
+- Gmail threads staging `[TEST] …` mails and production mails with the same subject into one conversation, labelled with the first subject; open the thread to see the newest mail. (`DEV_EMAIL` is the same inbox as the admins'.)
 
 
 - `GH_TOKEN` lacks the `read:org` scope; `gh auth status` warns. Harmless for this repo.
