@@ -5,7 +5,7 @@
 
 **Last updated:** 2026-11-13
 **Active phase:** S — Environment split (staging / production)
-**Status:** ⬜ planned 2026-11-13, starts when the user says "continue". Revised order below.
+**Status:** 🔄 built on branch `staging`; staging deploy test next, then the user's green light to merge into `main` (first production deploy, no public hostname yet).
 
 ---
 
@@ -20,7 +20,7 @@
 | 4 | Guide sales | ✅ | `3ecf790`, `a6c96d5`, `b6f0e4b` (₺ font) |
 | 5 | Booking (without Google) | ✅ | see `git log --grep 'phase 5'` |
 | 6 | Google Calendar | ✅ | `92ebc3c` (live test on staging passed 2026-11-11) |
-| S | Environment split: `staging` branch → staging, `main` → production Worker | ⬜ | — |
+| S | Environment split: `staging` branch → staging, `main` → production Worker | 🔄 | on `staging` |
 | 9 | Go live (prep list for the user, then the switch) | ⬜ | — |
 | P | Promo codes (Stripe) from admin, sent via the admin email flow | ⬜ | — |
 | 7 | Intake, reminders, summary | ⬜ | — |
@@ -34,18 +34,19 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Nothing in progress. Next: **Phase S — environment split** (on "continue"):
-1. Branch `staging` from `main` (same commit). From then on all work is pushed to `staging`; `main` only gets merges from `staging` with the user's green light.
-2. CI: push to `staging` → tests + deploy the **staging** Worker (today's `uceksen` Worker, D1, KV, R2, sandbox Stripe, Baran's Google, `staging.uceksen.com`). Push/merge to `main` → tests + deploy the **production** Worker (new: own D1, KV, R2, secrets; `uceksen.com`; `ENVIRONMENT=production`). Migrations run per environment in the same job, before deploy.
-3. `wrangler.toml` with two environments; production gets fresh resources and migrations; staging keeps its data.
-4. Both environments share the Resend domains (`uceksen.com` sending, `reply.uceksen.com` receiving; user decision 2026-11-13, no extra domain/cost). Staging uses `REPLY_LOCAL = "staging"`, production `"merhaba"`; each environment has its own inbound webhook, and the inbound handler **ignores (does not store or notify) any email whose recipient isn't its own `REPLY_LOCAL@REPLY_DOMAIN`**, so customer replies never land in staging. Tests for that filter.
-5. Rewrite the Phase 9 checklist for two Workers and hand the user the full prep list (Cloudflare, DNS, Access, Google, Stripe live, Resend).
+**Phase S — environment split** (2026-11-13), on branch `staging`:
+- `wrangler.toml`: top level = staging Worker `uceksen` (unchanged resources, `staging.uceksen.com`, `REPLY_LOCAL = "staging"`); `[env.production]` = Worker `uceksen-production` with its own D1 `uceksen-db-production` (`5baf8445-…`), KV `b37ebc7f…`, R2 `uceksen-files-production`, `ENVIRONMENT = "production"`, `APP_URL = https://uceksen.com`, `REPLY_LOCAL = "merhaba"`, `routes = []` (explicit: routes are inherited otherwise and production would take `staging.uceksen.com`), `workers_dev = false`. Sandbox price ids until go-live.
+- CI: push to `staging` → tests → staging migrations → deploy top level; push to `main` → same with `--env production`. GitHub environments `staging` / `production`.
+- Inbound: both environments share `reply.uceksen.com`; `isForThisEnvironment` makes staging keep only `staging[+token]@` mail and production everything else except staging's. Tests added (190 total).
+- Production D1 migrated (0001–0006, settings row present). Production secrets set: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `ENCRYPTION_KEY` (new random), `ADMIN_EMAILS` (`gizem=gizemderinkok@gmail.com,baran=bbartu.demirci@gmail.com`, copied from `.dev.vars`). Missing until go-live: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (live), `RESEND_INBOUND_SECRET` (production webhook, created at the switch). `DEV_EMAIL` not needed in production.
+- Note: test conversations on staging made before the split have `merhaba+…` reply addresses; replies to those now go to production's side, not staging.
 
 **Phase P — promo codes (after go-live).** In admin: create a Stripe promotion code (percent or amount off, product scope guide/consultation, expiry, max redemptions), list/deactivate codes, and send a code to a customer from the conversation using the existing admin email flow. Checkout sessions allow promotion codes. Details agreed with the user when the phase starts.
 
 ## Blocked on user
 
-Nothing. Staging on `https://staging.uceksen.com` is set up and tested (Access hostname, Google redirect URI, `bbartu.demirci@gmail.com` connected with an "Üç Eksen" calendar — all done 2026-11-11/12).
+1. **Green light to merge `staging` → `main`** after the staging deploy check. That merge deploys the production Worker for the first time (no hostname yet, so nothing public changes).
+2. **Go-live prep (Phase 9 section A below)** — can start now.
 
 Google preparation (done 2026-11-10): GCP project `uceksen` under `baran@botelabs.io`, Calendar API on, consent screen External + **In production** (unverified; fine for one user), scopes `calendar.events`, `calendar.freebusy`, `calendar.calendarlist.readonly`, no logo (a logo forces verification). Authorized domains `uceksen.com` + `gizemderinkok.workers.dev`; homepage/privacy/terms links point at `uceksen.com`. Web client `uceksen-web` with redirect URIs for workers.dev, `uceksen.com` and `localhost:8787` (`/admin/google/callback`). Client id/secret in `~/.gizem-creds` (`GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`) → `.dev.vars` + Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; `ENCRYPTION_KEY` generated separately for local and the Worker. "Üç Eksen" calendar created; Baran's calendar shared free/busy with Gizem.
 
@@ -219,47 +220,45 @@ Not blocking, for later:
 
 - **2026-11-10 — Consultation €100 (was €200); launch prices, no strikethrough.** User asked for crossed-out "was" prices (~~€30~~ €15, ~~€200~~ €100). Not done: under the EU Price Indication Directive art. 6a (Omnibus, ACM in NL) a crossed-out price must be the lowest price actually charged in the previous 30 days, and neither was ever charged. Instead (user's choice): "Lansman fiyatı. 1 Şubat 2027'den itibaren €30 / €200" under the price on `/rehber`, `/danismanlik`, the payment page and the terms. The home page shows no prices. Sandbox consult price now `price_1UaLI4JguQXFmVyOT5C8HrYe` (€100, inclusive); the €200 price is archived.
 
+- **2026-11-13 — Production `routes = []` explicit; no `www` on the Worker.** Wrangler inherits top-level routes into environments, which would move `staging.uceksen.com` to production. `www` is redirected by a Cloudflare redirect rule, not served by the Worker (static assets would otherwise be served twice, and `/admin` on `www` is outside Access).
 - **2026-11-13 — Separate staging and production; revised phase order (user decision).** Reverses the 2026-11-07 single-deployment decision: going live while Phases 7–8 continue needs a place to test that isn't production. Branches: work goes to `staging` (deploys staging); `main` gets merges from `staging` only with the user's green light (deploys production on `uceksen.com`). Order: S (split) → 9 (go live) → P (promo codes) → 7 → 8; afterwards everything is a new feature on live. Phase commits now land on `staging` and reach `main` by merge.
 - **2026-11-12 — DEV_EMAIL guard temporarily off on staging (user decision, overriding CLAUDE.md).** `MAIL_GUARD = "off"` in `wrangler.toml`; honoured only for exactly `ENVIRONMENT=staging`. Staging emails now go to the real recipients, so any address typed into a form or used in a test purchase gets real mail. Restore: delete the line and push. **Restored the same day** (`MAIL_GUARD = "on"`); the switch stays for future use.
 - **2026-11-11 — Staging on `staging.uceksen.com` (user request).** Worker custom domain instead of workers.dev, so testing uses the real zone; workers.dev kept on as a fallback until go-live. Still one deployment: going live is config (`APP_URL`, `ENVIRONMENT`, routes) plus Access/webhooks, not a new Worker. Google connected with Baran's account on staging so testing doesn't wait on Gizem; swapped at go-live. The Google connect hint is now the signed-in admin's own address (was always Gizem's).
 - **2026-11-10 — SEO / AI-agent pass (pulled forward from Phase 8's robots/sitemap).** Every public page: Turkish meta description, canonical + Open Graph/X tags pointing at `https://uceksen.com` (never workers.dev), JSON-LD (Organization with legal name/VAT, WebSite; Product+Offer €15 on `/rehber`, Service+Offer €100 on `/danismanlik`, VAT included, `priceValidUntil` 2027-01-31). New titles for `/`, `/rehber`, `/danismanlik` (h1s unchanged). `robots.txt`/`sitemap.xml` from the Worker: outside production `Disallow: /` (staging must not be indexed); production hides token/admin paths, names the sitemap, AI crawlers allowed. `llms.txt` (Turkish summary, products, prices; `src/content/llms.txt`, served by the Worker with `charset=utf-8` — as a static asset it went out without a charset and showed mojibake). Share image `og.png` + favicon/app icons rendered by `scripts/render-brand.mjs` from the site fonts and colours.
 
-## Phase 9 — go-live checklist (staging → production)
+## Phase 9 — go-live checklist (two Workers, from Phase S)
 
-> **To be rewritten in Phase S for two Workers** (production gets its own D1/KV/R2/secrets; no staging data to clear; `main` deploys production). The items below stay valid as content.
+Production = Worker `uceksen-production` (branch `main`), already created with its own D1/KV/R2 and most secrets. Staging stays as it is. **U** = user, **A** = agent.
 
-Written for the single-Worker setup: **one Worker**, production = same deployment with different config. If a separate production Worker is chosen instead (discussed 2026-11-12, not decided), steps B and E change: new D1/KV/R2 + migrations + all secrets set again, staging keeps its own Resend reply domain. Who: **U** = user (dashboard/accounts/money), **A** = agent.
+**A. User prep (any time before the switch)**
+1. **Stripe live** (`acct_1UZRHAJ8zQ8f9hgO`, activation instant), dashboard-only settings: public details (name "Üç Eksen", support email `merhaba@uceksen.com`, support URL `https://uceksen.com`, terms `https://uceksen.com/satis-kosullari`, privacy `https://uceksen.com/gizlilik`), branding (icon/logo/colours as in sandbox), statement descriptor `UCEKSEN.COM`, customer emails (recommended: Stripe receipts off), Adaptive Pricing on/off.
+2. **Stripe live keys** into `~/.gizem-creds` (never pasted in chat):
+   - `STRIPE_LIVE_SETUP_KEY_UCEKSEN` — a full secret key (or restricted with Products/Prices/Tax settings/Tax registrations/Webhook endpoints write), used **once by A** to mirror the sandbox: products + prices (€15 guide `txcd_10302000`, €100 consultation `txcd_20060048`, inclusive), Stripe Tax settings (head office, inclusive, default code) + NL registration, webhook endpoint `https://uceksen.com/api/webhooks/stripe` (2 events) → A sets `STRIPE_WEBHOOK_SECRET`. U can roll/delete it afterwards.
+   - `STRIPE_LIVE_KEY_UCEKSEN` — the **restricted** key the Worker uses: Checkout Sessions write, Refunds write, Invoices read, nothing else → A sets `STRIPE_SECRET_KEY --env production`.
+3. **Cloudflare Access**: app `uceksen` → Destinations → + Add public hostname: domain `uceksen.com`, path `admin`. (Can be done now; the hostname resolves at the switch.)
+4. **www** (optional): Cloudflare → `uceksen.com` → Rules → Redirect Rules → template "Redirect from WWW to root" (it also needs a proxied DNS record for `www`, the template says so). The Worker does not serve `www`.
+5. **Google**: nothing to prepare. Redirect URI `https://uceksen.com/admin/google/callback` is registered; Gizem's "Üç Eksen" calendar exists.
+6. **Resend**: nothing (A creates the production inbound webhook at the switch). Check the plan covers volume: free = 100/day, 3,000/month, shared by both environments.
+7. **GitHub** (optional): repo → Settings → Environments → `production` → required reviewer = you, so a merge to `main` waits for one click before deploying.
 
-**A. Before the switch (can be done days earlier)**
-1. **U — Stripe live account** `acct_1UZRHAJ8zQ8f9hgO`: activation is instant for the user (org with several accounts sharing the same business info, 2026-11-12), so no lead time. User finishes the sandbox setup first and mirrors it on live.
-2. **U — Stripe live settings** (sandbox settings do not carry over): public business details (support email `merhaba@uceksen.com`, terms URL `https://uceksen.com/satis-kosullari`, privacy URL), branding (icon `public/icon-512.png`, accent `#3A5A40`), Stripe Tax (head office NL, prices **inclusive**, NL registration added), customer emails (decide: Stripe receipts on/off; our own delivery mail already links the invoice), Adaptive Pricing on/off (open question).
-3. **A (with U's go) — mirror via API what the API allows** (products/prices, Stripe Tax settings + NL registration, webhook endpoint) to cut the double work; branding/public details stay manual. **Live products/prices**: guide €15 (tax code as in sandbox), consultation €100, both inclusive. Price ids → `wrangler.toml`.
-4. **U — restricted live key** with only: Checkout Sessions **write**, Refunds **write**, Invoices **read** (everything else none). → `wrangler secret put STRIPE_SECRET_KEY`.
-5. **U — live webhook endpoint** `https://uceksen.com/api/webhooks/stripe`, events `checkout.session.completed`, `checkout.session.async_payment_succeeded` → its signing secret → `wrangler secret put STRIPE_WEBHOOK_SECRET`. (Steps 4–5 break staging payments the moment they are set — do them in the switch window, step B.)
-6. **U — Resend plan**: free tier is 100 mails/day, 3,000/month. Check it covers expected volume (each sale/booking sends 2–4 mails incl. admin notices); upgrade if not.
-7. **U — content**: real guide PDF uploaded at `/admin/rehber` (current version, "güncel yap"); real working hours + rules at `/admin/takvim`; check privacy page lists the processors actually used (Cloudflare, Resend, Stripe, Google).
-8. **A — backup** of D1 to R2 (Phase 8 job, or a manual export) right before the switch.
-
-**B. The switch (one sitting, ~30 min)**
-1. **A — `wrangler.toml`**: `routes` add `uceksen.com` (+ `www.uceksen.com`, redirected to the apex); `workers_dev = false`; `ENVIRONMENT = "production"`; `APP_URL = "https://uceksen.com"`; live price ids. Keep `staging.uceksen.com` route for a while (old test links), remove later.
-2. **U — secrets** from A4/A5. Other secrets (`RESEND_*`, `GOOGLE_*`, `ENCRYPTION_KEY`, `ADMIN_EMAILS`, `DEV_EMAIL`) stay.
-3. **U — Access**: add hostname `uceksen.com`, path `admin` to the `uceksen` app (same AUD).
-4. **A — Resend webhook** `2f6b919a-…` → `https://uceksen.com/api/webhooks/resend`.
-5. **A — data**: delete staging test data from D1 (contacts, conversations, messages, attachments in R2, purchases, download tokens, booking intents, bookings, rate-limit keys in KV); settings row and guide versions stay.
-6. **A — push** → CI deploys. DNS: nothing by hand (custom domains create records + certificates; existing MX/TXT for mail stay).
-7. **U — Google**: `/admin/takvim` → **Bağlantıyı kes** (`bbartu.demirci@gmail.com`) → Gizem connects `gizemderinkok@gmail.com`; booking calendar "Üç Eksen", busy calendars correct. Redirect URI `https://uceksen.com/admin/google/callback` is already registered.
+**B. Switch (one sitting, ~30 min)**
+1. **A** — mirror Stripe (A2), set both Stripe secrets; live price ids into `[env.production.vars]`; uncomment `routes` (`uceksen.com`) in `[env.production]`.
+2. **A** — create the Resend webhook `https://uceksen.com/api/webhooks/resend` (`email.received`) → `RESEND_INBOUND_SECRET --env production`.
+3. **U** — green light → A merges `staging` → `main` → CI deploys production on `uceksen.com` (custom domain creates DNS + certificate; existing MX/TXT stay).
+4. **U** — on `https://uceksen.com/admin/`: upload the real guide PDF (`/admin/rehber`), set working hours/rules (`/admin/takvim`), Gizem connects Google (`gizemderinkok@gmail.com`), check booking + busy calendars. (Production D1/R2 start empty; nothing from staging carries over.)
+5. **A** — backup of production D1 to R2 once data exists (Phase 8 job or manual export).
 
 **C. Checks right after**
-1. **A** — `/health` → `"environment":"production"`; `robots.txt` allows + sitemap; `uceksen.com/admin/` asks for Access; workers.dev no longer answers; `www` redirects.
-2. **U** — real guide purchase with own card → delivery mail + download → refund in Stripe.
-3. **U** — real consultation purchase → booking → Meet link in Gizem's calendar, customer gets `.ics`, Google sends the customer nothing → cancel (>48 h) → automatic refund arrives.
-4. **U** — contact form → admin reply → reply by email from the customer side lands in the thread.
+1. **A** — `/health` → `"environment":"production"`; robots.txt allows + sitemap; `/admin/` asks for Access; webhooks reject unsigned requests.
+2. **U** — real guide purchase → delivery mail + download → refund in Stripe.
+3. **U** — real consultation purchase → booking → Meet event in Gizem's calendar, `.ics` to the customer, nothing from Google → cancel (>48 h) → automatic refund.
+4. **U** — contact form → admin reply → reply by email lands in the thread (production), not in staging.
 5. **U** — share `https://uceksen.com` in WhatsApp/X: preview image shows.
 
 **D. Later, not blocking**
-- Cloudflare zone: check AI-crawler / managed robots.txt settings, "Always use HTTPS" on.
+- Cloudflare zone: AI-crawler / managed robots.txt settings, "Always use HTTPS".
 - Google Search Console: verify `uceksen.com`, submit `sitemap.xml`.
-- Remove workers.dev hostname from Access and old redirect URIs from the Google client.
+- Remove the workers.dev hostname from Access and the workers.dev redirect URI from the Google client; staging can drop `workers_dev` too.
 - 1 Feb 2027: launch prices end (see Known issues).
 
 ## Known issues
@@ -284,4 +283,4 @@ Written for the single-Worker setup: **one Worker**, production = same deploymen
 
 ## Next step
 
-User says "continue" → Phase S (environment split) → hand the user the go-live prep list → Phase 9 switch → Phase P (promo codes) → Phase 7 → Phase 8.
+Staging deploy check (push to `staging`) → user's green light → merge into `main` (first production deploy, no hostname) → user does Phase 9 section A → switch (section B) → Phase P (promo codes) → Phase 7 → Phase 8.

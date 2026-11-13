@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractPlusToken, htmlToText, parseAddress, parseMessageIds, stripQuotes } from "../src/lib/inbound";
+import { extractPlusToken, htmlToText, isForThisEnvironment, parseAddress, parseMessageIds, stripQuotes } from "../src/lib/inbound";
 
 describe("stripQuotes", () => {
   const cases: [string, string, string][] = [
@@ -87,5 +87,31 @@ describe("address helpers", () => {
     expect(extractPlusToken([`merhaba+${tok}@uceksen.com`], "merhaba", "reply.uceksen.com")).toBeNull();
     expect(extractPlusToken([`baska+${tok}@reply.uceksen.com`], "merhaba", "reply.uceksen.com")).toBeNull();
     expect(extractPlusToken([`merhaba+short@reply.uceksen.com`, undefined], "merhaba", "reply.uceksen.com")).toBeNull();
+  });
+});
+
+describe("isForThisEnvironment (both Workers share reply.uceksen.com)", () => {
+  const D = "reply.uceksen.com";
+  const tok = "abcdefghijklmnopqrstuvwxyz234567";
+  const staging = { ENVIRONMENT: "staging", REPLY_LOCAL: "staging", REPLY_DOMAIN: D };
+  const prod = { ENVIRONMENT: "production", REPLY_LOCAL: "merhaba", REPLY_DOMAIN: D };
+
+  it("staging keeps only mail to its own address", () => {
+    expect(isForThisEnvironment(staging, [`staging+${tok}@${D}`])).toBe(true);
+    expect(isForThisEnvironment(staging, [`"Üç Eksen" <STAGING@Reply.Uceksen.com>`])).toBe(true);
+    expect(isForThisEnvironment(staging, [`merhaba+${tok}@${D}`])).toBe(false);
+    expect(isForThisEnvironment(staging, [`nobody@${D}`, undefined])).toBe(false);
+    expect(isForThisEnvironment(staging, [])).toBe(false);
+  });
+
+  it("production keeps its own, unknown and typo addresses, but not staging's", () => {
+    expect(isForThisEnvironment(prod, [`merhaba+${tok}@${D}`])).toBe(true);
+    expect(isForThisEnvironment(prod, [`nobody@${D}`])).toBe(true);
+    expect(isForThisEnvironment(prod, [])).toBe(true);
+    expect(isForThisEnvironment(prod, [`staging+${tok}@${D}`])).toBe(false);
+    expect(isForThisEnvironment(prod, [`Staging@${D}`, `someone@example.com`])).toBe(false);
+    expect(isForThisEnvironment(prod, [`staging+${tok}@${D}`, `merhaba+${tok}@${D}`])).toBe(true);
+    // staging@ on another domain is not staging's reply address
+    expect(isForThisEnvironment(prod, [`staging@uceksen.com`])).toBe(true);
   });
 });

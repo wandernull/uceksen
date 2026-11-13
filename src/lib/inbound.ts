@@ -90,6 +90,28 @@ export function parseMessageIds(raw: string | null | undefined): string[] {
   return [...new Set(raw.match(/<[^<>\s]+>/g) ?? [])];
 }
 
+/** Reply local part used by the staging Worker (wrangler.toml top level). */
+export const STAGING_REPLY_LOCAL = "staging";
+
+/**
+ * Both Workers share reply.uceksen.com, and Resend delivers every received email to every
+ * webhook. Staging keeps only mail addressed to its own `staging[+token]@` address; production
+ * keeps everything else (its own address, typos, unknown locals) except staging's mail.
+ */
+export function isForThisEnvironment(
+  env: Pick<Env, "ENVIRONMENT" | "REPLY_LOCAL" | "REPLY_DOMAIN">,
+  addresses: (string | null | undefined)[],
+): boolean {
+  const domain = env.REPLY_DOMAIN.toLowerCase();
+  const locals = addresses
+    .map((a) => parseAddress(a)?.email?.toLowerCase())
+    .filter((e): e is string => !!e && e.endsWith(`@${domain}`))
+    .map((e) => e.slice(0, -domain.length - 1).split("+")[0]!);
+  if (locals.includes(env.REPLY_LOCAL.toLowerCase())) return true;
+  if (env.ENVIRONMENT !== "production") return false;
+  return !locals.includes(STAGING_REPLY_LOCAL);
+}
+
 /** Finds the conversation token in `local+token@domain` among the given addresses. */
 export function extractPlusToken(addresses: (string | null | undefined)[], local: string, domain: string): string | null {
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

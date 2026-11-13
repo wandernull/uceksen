@@ -77,7 +77,7 @@ describe("POST /api/webhooks/resend", () => {
     expect(ack.provider_message_id).toBe(sentMessageId(String(ack.resend_id)));
     fake.reset();
 
-    const res = await postWebhook(inbound("in1", { to: ["someone-else@reply.uceksen.com"], headers: { "in-reply-to": ack.provider_message_id } }));
+    const res = await postWebhook(inbound("in1", { to: ["merhaba@reply.uceksen.com"], headers: { "in-reply-to": ack.provider_message_id } }));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ matched: true });
 
@@ -95,7 +95,7 @@ describe("POST /api/webhooks/resend", () => {
     const conv = await newConversation("late-id@example.com");
     const ack = (await messages(conv.id)).find((m) => m.direction === "out")!;
     await env.DB.prepare("UPDATE messages SET provider_message_id = NULL WHERE id = ?1").bind(ack.id).run();
-    const res = await postWebhook(inbound("in9", { to: ["x@reply.uceksen.com"], headers: { "in-reply-to": sentMessageId(String(ack.resend_id)) } }));
+    const res = await postWebhook(inbound("in9", { to: ["merhaba@reply.uceksen.com"], headers: { "in-reply-to": sentMessageId(String(ack.resend_id)) } }));
     expect(await res.json()).toMatchObject({ matched: true });
     expect((await messages(conv.id)).find((m) => m.id === ack.id)!.provider_message_id).toBe(sentMessageId(String(ack.resend_id)));
   });
@@ -126,7 +126,7 @@ describe("POST /api/webhooks/resend", () => {
     expect(await res.json()).toMatchObject({ duplicate: true });
     expect((await messages(conv.id)).filter((m) => m.direction === "in")).toHaveLength(2); // form + one reply
 
-    const un = inbound("in5", { to: ["nobody@reply.uceksen.com"] });
+    const un = inbound("in5", { to: ["merhaba@reply.uceksen.com"] });
     await postWebhook(un);
     await postWebhook(un);
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM unmatched_emails WHERE provider_message_id = '<in5@mail.gmail.com>'").first<{ n: number }>();
@@ -155,6 +155,19 @@ describe("POST /api/webhooks/resend", () => {
     expect(att!.filename).toBe("pasaport.pdf");
     const obj = await env.BUCKET.get(att!.r2_key);
     expect(new Uint8Array(await obj!.arrayBuffer())).toEqual(new Uint8Array([37, 80, 68, 70]));
+  });
+
+  it("ignores mail for the other environment: nothing stored, nobody notified", async () => {
+    const conv = await newConversation("other@example.com");
+    fake.reset();
+    for (const [id, to] of [["in10", `staging+${conv.plus_token}@reply.uceksen.com`], ["in11", "nobody@reply.uceksen.com"]] as const) {
+      const res = await postWebhook(inbound(id, { to: [to] }));
+      expect(await res.json()).toMatchObject({ ok: true, ignored: "other-environment" });
+    }
+    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM unmatched_emails WHERE provider_message_id IN ('<in10@mail.gmail.com>','<in11@mail.gmail.com>')").first<{ n: number }>();
+    expect(n!.n).toBe(0);
+    expect((await messages(conv.id)).filter((m) => m.direction === "in")).toHaveLength(1); // the form only
+    expect(fake.sent).toHaveLength(0);
   });
 
   it("acknowledges other event types without doing anything", async () => {

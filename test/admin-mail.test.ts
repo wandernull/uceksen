@@ -109,7 +109,7 @@ describe("/admin replies", () => {
 
   it("lists and deletes unmatched emails", async () => {
     fake.received.set("um1", {
-      id: "um1", from: "kim@example.com", to: ["x@reply.uceksen.com"], subject: "Kayıp", message_id: "<um1@x>",
+      id: "um1", from: "kim@example.com", to: ["merhaba@reply.uceksen.com"], subject: "Kayıp", message_id: "<um1@x>",
       text: "Bu nereye gidiyor?", html: null, headers: {},
     });
     await postWebhook({ type: "email.received", data: { email_id: "um1" } });

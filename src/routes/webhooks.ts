@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { ATTACH, storeAttachment } from "../lib/attachments";
 import { notifyAdmins, notifyNewMessage, recordIncoming, snippet } from "../lib/conversations";
-import { extractPlusToken, htmlToText, parseAddress, parseMessageIds, stripQuotes } from "../lib/inbound";
+import { extractPlusToken, htmlToText, isForThisEnvironment, parseAddress, parseMessageIds, stripQuotes } from "../lib/inbound";
 import { fetchReceivedAttachments, fetchReceivedEmail, fetchSentMessageId, resendApi, type ReceivedEmail } from "../lib/mail";
 import { fulfillConsult } from "../lib/booking";
 import { fulfillGuide } from "../lib/guide";
@@ -12,6 +12,12 @@ import { verifyWebhook } from "../lib/webhook-signature";
 export const webhooks = new Hono<AppEnv>();
 
 const MAX_BODY = 100_000;
+
+/** Every address the email was delivered to, from the parsed fields and the headers. */
+export function recipients(email: ReceivedEmail): (string | undefined)[] {
+  const h = email.headers ?? {};
+  return [...(email.to ?? []), ...(email.received_for ?? []), ...(email.cc ?? []), h["to"], h["delivered-to"]];
+}
 
 /** Conversation for an inbound email: In-Reply-To/References first, then the plus token. */
 export async function matchConversation(
@@ -32,11 +38,7 @@ export async function matchConversation(
     if (!row && (await resolvePendingMessageIds(env))) row = await byHeader();
     if (row) return row.conversation_id;
   }
-  const token = extractPlusToken(
-    [...(email.to ?? []), ...(email.received_for ?? []), ...(email.cc ?? []), h["to"], h["delivered-to"]],
-    env.REPLY_LOCAL,
-    env.REPLY_DOMAIN,
-  );
+  const token = extractPlusToken(recipients(email), env.REPLY_LOCAL, env.REPLY_DOMAIN);
   if (!token) return null;
   const conv = await env.DB.prepare("SELECT id FROM conversations WHERE plus_token = ?1").bind(token).first<{ id: number }>();
   return conv?.id ?? null;
@@ -85,6 +87,8 @@ webhooks.post("/resend", async (c) => {
 
   // Errors from here on return 500 so Resend retries the delivery.
   const email = await fetchReceivedEmail(c.env, event.data.email_id);
+  // The other environment's mail: not stored, not notified, not retried.
+  if (!isForThisEnvironment(c.env, recipients(email))) return c.json({ ok: true, ignored: "other-environment" });
   const providerId = email.message_id ?? email.headers?.["message-id"] ?? null;
 
   if (providerId) {

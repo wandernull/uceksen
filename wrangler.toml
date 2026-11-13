@@ -3,10 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 account_id = "ef35eded2f130806ec2824e2920866ee"
-# Staging lives on staging.uceksen.com (Worker custom domain; Cloudflare creates the DNS
-# record and certificate). workers.dev stays on as a fallback until go-live.
-# GO-LIVE: see "Phase 9 — go-live checklist" in PROGRESS.md — add uceksen.com here,
-# set workers_dev = false, flip ENVIRONMENT and APP_URL below.
+
+# Two environments, two Workers (Phase S, 2026-11-13):
+#   top level          = STAGING     Worker "uceksen"            branch `staging`  → staging.uceksen.com
+#   [env.production]   = PRODUCTION  Worker "uceksen-production" branch `main`     → uceksen.com (at go-live)
+# CI deploys each from its branch. vars and bindings are NOT inherited by
+# [env.production] (repeated there); routes ARE inherited (hence `routes = []`). Locally, `wrangler dev`
+# uses the top level with .dev.vars on top (ENVIRONMENT=local).
+
+# ---------------------------------------------------------------- staging (top level)
 workers_dev = true
 routes = [
   { pattern = "staging.uceksen.com", custom_domain = true },
@@ -14,38 +19,40 @@ routes = [
 
 # Static pages from public/. Matching files are served directly; everything else
 # (APIs, dynamic pages) falls through to the Worker. /rehber serves rehber.html,
-# /rehber.html redirects to /rehber.
+# /rehber.html redirects to /rehber. Inherited by production.
 [assets]
 directory = "./public"
 binding = "ASSETS"
 html_handling = "auto-trailing-slash"
 not_found_handling = "none"
 
-# Single deployment. ENVIRONMENT stays "staging" until go-live (Phase 9) so the
-# DEV_EMAIL guard is active. Locally, .dev.vars overrides it to "local".
 # Every absolute link (emails, Stripe return URLs, Google OAuth redirect) comes from APP_URL.
+# Outside production every email is redirected to DEV_EMAIL (see src/lib/mail.ts).
 [vars]
 ENVIRONMENT = "staging"
 APP_URL = "https://staging.uceksen.com"
 # DEV_EMAIL guard switch. "off" = staging emails go to the real recipients (only honoured
 # when ENVIRONMENT = "staging"). Guard is ON; only the user decides to turn it off.
 MAIL_GUARD = "on"
-# Cloudflare Access (Zero Trust) for /admin. Empty = /admin refuses everyone on
-# the deployed Worker. Filled in once the Access application exists.
+# Cloudflare Access (Zero Trust) for /admin. One Access app ("uceksen") covers both
+# environments' hostnames, so the AUD is the same.
 ACCESS_TEAM_DOMAIN = "twilight-surf-1e57.cloudflareaccess.com"
 ACCESS_AUD = "3cd68cb34b43442be78fbe69bbd46d5292f1e697a9a0cd94879bf00636db5d0b"
-# Email (Resend). Replies come back to REPLY_LOCAL+<plus_token>@REPLY_DOMAIN, a
-# receiving-only Resend domain; the root domain's MX belongs to Cloudflare Email Routing.
+# Email (Resend). Both environments send from uceksen.com and receive on reply.uceksen.com
+# (receiving-only; the root domain's MX belongs to Cloudflare Email Routing). Replies come
+# back to REPLY_LOCAL+<plus_token>@REPLY_DOMAIN; each environment ignores inbound mail
+# that belongs to the other (src/lib/inbound.ts, isForThisEnvironment).
 MAIL_FROM = "Üç Eksen <merhaba@uceksen.com>"
 MAIL_DOMAIN = "uceksen.com"
-REPLY_LOCAL = "merhaba"
+REPLY_LOCAL = "staging"
 REPLY_DOMAIN = "reply.uceksen.com"
-# Stripe prices (sandbox ids during the build; replaced with live ids at go-live).
+# Stripe sandbox prices.
 STRIPE_PRICE_GUIDE = "price_1UZUGsJguQXFmVyOe5dbLWcY"
 STRIPE_PRICE_CONSULT = "price_1UaLI4JguQXFmVyOT5C8HrYe"
-# Secrets (wrangler secret put): ADMIN_EMAILS ("gizem=a@x.com,baran=b@y.com"),
-# DEV_EMAIL, RESEND_API_KEY, RESEND_INBOUND_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
-# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ENCRYPTION_KEY (base64, 32 bytes)
+# Secrets per environment (wrangler secret put [--env production]): ADMIN_EMAILS
+# ("gizem=a@x.com,baran=b@y.com"), DEV_EMAIL, RESEND_API_KEY, RESEND_INBOUND_SECRET,
+# STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+# ENCRYPTION_KEY (base64, 32 bytes; different per environment)
 
 [[d1_databases]]
 binding = "DB"
@@ -62,4 +69,49 @@ binding = "BUCKET"
 bucket_name = "uceksen-files"
 
 [observability]
+enabled = true
+
+# ---------------------------------------------------------------- production
+[env.production]
+name = "uceksen-production"
+# GO-LIVE (Phase 9): use the routes below (www is a Cloudflare redirect rule, not a
+# route). Until then the production Worker is deployed but has no public hostname.
+#   routes = [
+#     { pattern = "uceksen.com", custom_domain = true },
+#   ]
+# Must stay explicit: routes are inherited otherwise, and deploying production would take
+# staging.uceksen.com away from the staging Worker.
+routes = []
+workers_dev = false
+
+[env.production.vars]
+ENVIRONMENT = "production"
+APP_URL = "https://uceksen.com"
+# Ignored in production (the guard never applies there); present so the var set matches.
+MAIL_GUARD = "on"
+ACCESS_TEAM_DOMAIN = "twilight-surf-1e57.cloudflareaccess.com"
+ACCESS_AUD = "3cd68cb34b43442be78fbe69bbd46d5292f1e697a9a0cd94879bf00636db5d0b"
+MAIL_FROM = "Üç Eksen <merhaba@uceksen.com>"
+MAIL_DOMAIN = "uceksen.com"
+REPLY_LOCAL = "merhaba"
+REPLY_DOMAIN = "reply.uceksen.com"
+# GO-LIVE (Phase 9): replace with the live price ids. Sandbox ids until then.
+STRIPE_PRICE_GUIDE = "price_1UZUGsJguQXFmVyOe5dbLWcY"
+STRIPE_PRICE_CONSULT = "price_1UaLI4JguQXFmVyOT5C8HrYe"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "uceksen-db-production"
+database_id = "5baf8445-4cea-4fab-aa1a-48a5bfb1908a"
+migrations_dir = "migrations"
+
+[[env.production.kv_namespaces]]
+binding = "KV"
+id = "b37ebc7f87304ddda9ad5cb3d35e11ff"
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "uceksen-files-production"
+
+[env.production.observability]
 enabled = true

@@ -8,6 +8,8 @@ export default defineConfig({
       miniflare: {
         bindings: {
           ENVIRONMENT: "test",
+          // Tests use production's reply address (staging's is "staging").
+          REPLY_LOCAL: "merhaba",
           ADMIN_EMAILS: "gizem=gizem@example.com,baran=baran@example.com",
           DEV_EMAIL: "dev@example.com",
           RESEND_API_KEY: "re_test",
