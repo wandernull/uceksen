@@ -3,9 +3,9 @@
 > Maintained by the agent. First action of every session: read this file. Update it at the end of every phase.
 > When the user returns after a break, this file tells them where things stand.
 
-**Last updated:** 2026-11-12
-**Active phase:** Phase 6 — Google Calendar
-**Status:** Phase 6 done — Google connected on staging (`bbartu.demirci@gmail.com`), end-to-end test passed 2026-11-11. Next: Phase 7.
+**Last updated:** 2026-11-13
+**Active phase:** S — Environment split (staging / production)
+**Status:** ⬜ planned 2026-11-13, starts when the user says "continue". Revised order below.
 
 ---
 
@@ -20,9 +20,13 @@
 | 4 | Guide sales | ✅ | `3ecf790`, `a6c96d5`, `b6f0e4b` (₺ font) |
 | 5 | Booking (without Google) | ✅ | see `git log --grep 'phase 5'` |
 | 6 | Google Calendar | ✅ | `92ebc3c` (live test on staging passed 2026-11-11) |
+| S | Environment split: `staging` branch → staging, `main` → production Worker | ⬜ | — |
+| 9 | Go live (prep list for the user, then the switch) | ⬜ | — |
+| P | Promo codes (Stripe) from admin, sent via the admin email flow | ⬜ | — |
 | 7 | Intake, reminders, summary | ⬜ | — |
 | 8 | Cleanup and resilience | ⬜ | — |
-| 9 | Go live | ⬜ | — |
+
+**Revised order (user decision 2026-11-13):** S → 9 → P → 7 → 8. Table rows are in that order. After Phase 8 everything is a new feature on live.
 
 Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · ✅ done
 
@@ -30,16 +34,18 @@ Status markers: ⬜ not started · 🔄 in progress · ⏸ blocked on user · �
 
 ## Currently working on
 
-Phase 6 (Google Calendar). Code done: OAuth from `/admin/takvim`, encrypted refresh token, freebusy, events with Meet links, reschedule/cancel sync, admin retry. 174 tests pass; migration `0006` applied to remote D1; Worker deployed manually (not committed yet). After the user connects: live test on staging (temporary hours → sandbox payment → booking → event + Meet link in "Üç Eksen" → reschedule → cancel), then commit `phase 6: …`.
+Nothing in progress. Next: **Phase S — environment split** (on "continue"):
+1. Branch `staging` from `main` (same commit). From then on all work is pushed to `staging`; `main` only gets merges from `staging` with the user's green light.
+2. CI: push to `staging` → tests + deploy the **staging** Worker (today's `uceksen` Worker, D1, KV, R2, sandbox Stripe, Baran's Google, `staging.uceksen.com`). Push/merge to `main` → tests + deploy the **production** Worker (new: own D1, KV, R2, secrets; `uceksen.com`; `ENVIRONMENT=production`). Migrations run per environment in the same job, before deploy.
+3. `wrangler.toml` with two environments; production gets fresh resources and migrations; staging keeps its data.
+4. Staging gets its own reply domain (`reply-staging.uceksen.com`) so customer replies never reach staging.
+5. Rewrite the Phase 9 checklist for two Workers and hand the user the full prep list (Cloudflare, DNS, Access, Google, Stripe live, Resend).
+
+**Phase P — promo codes (after go-live).** In admin: create a Stripe promotion code (percent or amount off, product scope guide/consultation, expiry, max redemptions), list/deactivate codes, and send a code to a customer from the conversation using the existing admin email flow. Checkout sessions allow promotion codes. Details agreed with the user when the phase starts.
 
 ## Blocked on user
 
-**Staging moved to `https://staging.uceksen.com` (2026-11-11).** Google will be connected with Baran's `bbartu.demirci@gmail.com` for testing so work can go on in parallel; Gizem's account is connected at the production switch. User steps:
-1. **Access:** Zero Trust → Access controls → Applications → `uceksen` → Destinations → + Add public hostname: subdomain `staging`, domain `uceksen.com`, path `admin`. (Same app ⇒ same AUD; no config change.) Until then `/admin/` on staging returns 403 (fails closed).
-2. **Google client `uceksen-web`:** add redirect URI `https://staging.uceksen.com/admin/google/callback`.
-3. In `bbartu.demirci@gmail.com`, create a calendar named **Üç Eksen** (events go there; without it the connect step picks no booking calendar).
-4. `https://staging.uceksen.com/admin/takvim` → **Google'a bağlan** → sign in as `bbartu.demirci@gmail.com` → Advanced → Go to Üç Eksen → Continue. The hint now pre-selects the signed-in admin's own address.
-5. Live test (temporary hours → sandbox payment → book → event + Meet link → reschedule → cancel).
+Nothing. Staging on `https://staging.uceksen.com` is set up and tested (Access hostname, Google redirect URI, `bbartu.demirci@gmail.com` connected with an "Üç Eksen" calendar — all done 2026-11-11/12).
 
 Google preparation (done 2026-11-10): GCP project `uceksen` under `baran@botelabs.io`, Calendar API on, consent screen External + **In production** (unverified; fine for one user), scopes `calendar.events`, `calendar.freebusy`, `calendar.calendarlist.readonly`, no logo (a logo forces verification). Authorized domains `uceksen.com` + `gizemderinkok.workers.dev`; homepage/privacy/terms links point at `uceksen.com`. Web client `uceksen-web` with redirect URIs for workers.dev, `uceksen.com` and `localhost:8787` (`/admin/google/callback`). Client id/secret in `~/.gizem-creds` (`GOOGLE_CLIENT_ID_UCEKSEN`, `GOOGLE_CLIENT_SECRET_UCEKSEN`) → `.dev.vars` + Worker secrets `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; `ENCRYPTION_KEY` generated separately for local and the Worker. "Üç Eksen" calendar created; Baran's calendar shared free/busy with Gizem.
 
@@ -213,13 +219,16 @@ Not blocking, for later:
 
 - **2026-11-10 — Consultation €100 (was €200); launch prices, no strikethrough.** User asked for crossed-out "was" prices (~~€30~~ €15, ~~€200~~ €100). Not done: under the EU Price Indication Directive art. 6a (Omnibus, ACM in NL) a crossed-out price must be the lowest price actually charged in the previous 30 days, and neither was ever charged. Instead (user's choice): "Lansman fiyatı. 1 Şubat 2027'den itibaren €30 / €200" under the price on `/rehber`, `/danismanlik`, the payment page and the terms. The home page shows no prices. Sandbox consult price now `price_1UaLI4JguQXFmVyOT5C8HrYe` (€100, inclusive); the €200 price is archived.
 
+- **2026-11-13 — Separate staging and production; revised phase order (user decision).** Reverses the 2026-11-07 single-deployment decision: going live while Phases 7–8 continue needs a place to test that isn't production. Branches: work goes to `staging` (deploys staging); `main` gets merges from `staging` only with the user's green light (deploys production on `uceksen.com`). Order: S (split) → 9 (go live) → P (promo codes) → 7 → 8; afterwards everything is a new feature on live. Phase commits now land on `staging` and reach `main` by merge.
 - **2026-11-12 — DEV_EMAIL guard temporarily off on staging (user decision, overriding CLAUDE.md).** `MAIL_GUARD = "off"` in `wrangler.toml`; honoured only for exactly `ENVIRONMENT=staging`. Staging emails now go to the real recipients, so any address typed into a form or used in a test purchase gets real mail. Restore: delete the line and push. **Restored the same day** (`MAIL_GUARD = "on"`); the switch stays for future use.
 - **2026-11-11 — Staging on `staging.uceksen.com` (user request).** Worker custom domain instead of workers.dev, so testing uses the real zone; workers.dev kept on as a fallback until go-live. Still one deployment: going live is config (`APP_URL`, `ENVIRONMENT`, routes) plus Access/webhooks, not a new Worker. Google connected with Baran's account on staging so testing doesn't wait on Gizem; swapped at go-live. The Google connect hint is now the signed-in admin's own address (was always Gizem's).
 - **2026-11-10 — SEO / AI-agent pass (pulled forward from Phase 8's robots/sitemap).** Every public page: Turkish meta description, canonical + Open Graph/X tags pointing at `https://uceksen.com` (never workers.dev), JSON-LD (Organization with legal name/VAT, WebSite; Product+Offer €15 on `/rehber`, Service+Offer €100 on `/danismanlik`, VAT included, `priceValidUntil` 2027-01-31). New titles for `/`, `/rehber`, `/danismanlik` (h1s unchanged). `robots.txt`/`sitemap.xml` from the Worker: outside production `Disallow: /` (staging must not be indexed); production hides token/admin paths, names the sitemap, AI crawlers allowed. `llms.txt` (Turkish summary, products, prices; `src/content/llms.txt`, served by the Worker with `charset=utf-8` — as a static asset it went out without a charset and showed mojibake). Share image `og.png` + favicon/app icons rendered by `scripts/render-brand.mjs` from the site fonts and colours.
 
 ## Phase 9 — go-live checklist (staging → production)
 
-Written for the current setup: **one Worker**, production = same deployment with different config. If a separate production Worker is chosen instead (discussed 2026-11-12, not decided), steps B and E change: new D1/KV/R2 + migrations + all secrets set again, staging keeps its own Resend reply domain. Who: **U** = user (dashboard/accounts/money), **A** = agent.
+> **To be rewritten in Phase S for two Workers** (production gets its own D1/KV/R2/secrets; no staging data to clear; `main` deploys production). The items below stay valid as content.
+
+Written for the single-Worker setup: **one Worker**, production = same deployment with different config. If a separate production Worker is chosen instead (discussed 2026-11-12, not decided), steps B and E change: new D1/KV/R2 + migrations + all secrets set again, staging keeps its own Resend reply domain. Who: **U** = user (dashboard/accounts/money), **A** = agent.
 
 **A. Before the switch (can be done days earlier)**
 1. **U — Stripe live account** `acct_1UZRHAJ8zQ8f9hgO`: activation is instant for the user (org with several accounts sharing the same business info, 2026-11-12), so no lead time. User finishes the sandbox setup first and mirrors it on live.
@@ -275,4 +284,4 @@ Written for the current setup: **one Worker**, production = same deployment with
 
 ## Next step
 
-User finishes the staging steps above (Access hostname, Google redirect URI, connect `bbartu.demirci@gmail.com`) → live test on staging → commit `phase 6` → approval → Phase 7 (intake, reminders, summary).
+User says "continue" → Phase S (environment split) → hand the user the go-live prep list → Phase 9 switch → Phase P (promo codes) → Phase 7 → Phase 8.

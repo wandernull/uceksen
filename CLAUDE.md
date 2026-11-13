@@ -37,6 +37,8 @@ Updates must be substantive. The user should understand the state from this file
 
 **Commit discipline:** one commit at the end of each phase, message format `phase N: <short summary>`. Never combine two phases in one commit. Commits are the real restore points; `PROGRESS.md` is the human-readable summary.
 
+**Branches (from Phase S, 2026-11-13):** all work is committed and pushed to `staging` (deploys the staging Worker). `main` deploys **production**: merge `staging` into `main` only when the user explicitly gives the green light for that merge. Never commit directly to `main`.
+
 When context starts getting tight, update `PROGRESS.md` first, then continue.
 
 ## How to work
